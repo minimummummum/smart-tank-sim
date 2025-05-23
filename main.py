@@ -24,8 +24,8 @@ def yolo_worker(input_q, output_q):
     model = YOLO("yolov8n.pt").to("cuda")
     while True:
         image = input_q.get()
-        if image is None:  # 종료 시그널
-            break
+        #if image is None:
+            #break
         results = model(image, verbose=False)
         detections = results[0].boxes.data.cpu().numpy().tolist()
         output_q.put(detections)
@@ -34,8 +34,8 @@ def yolo_worker(input_q, output_q):
 def action_worker(input_q, output_q):
     while True:
         data = input_q.get()
-        if data is None:
-            break
+        #if data is None:
+            #break
         log_data, detections = data
         # action 로직 예시
         action = {
