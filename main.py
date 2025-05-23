@@ -83,8 +83,8 @@ def info():
     log_data = data
     #print("📨 /info data received:", data)
     # Auto-reset after 15 seconds
-    if data.get("time", 0) > 5:
-        return jsonify({"status": "success", "control": "reset"}) # "control": "pause"
+    # if data.get("time", 0) > 5:
+    #     return jsonify({"status": "success", "control": "reset"}) # "control": "pause"
     return jsonify({"status": "success", "control": ""})
 
 @app.route('/get_action', methods=['POST'])
@@ -144,13 +144,13 @@ def collision():
 
 @app.route('/init', methods=['GET'])
 def init():
-    x = np.random.randint(0, 300)
-    z = np.random.randint(0, 300)
+    #x = np.random.randint(0, 300)
+    #z = np.random.randint(0, 300)
     config = {
         "startMode": "start",  # Options: "start" or "pause"
-        "blStartX": x,  #Blue Start Position 60
+        "blStartX": 60,  #Blue Start Position 60
         "blStartY": 10,
-        "blStartZ": z, # 27.23
+        "blStartZ": 27.23, # 27.23
         "rdStartX": 59, #Red Start Position
         "rdStartY": 10,
         "rdStartZ": 280,
