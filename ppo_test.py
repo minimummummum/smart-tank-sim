@@ -63,7 +63,7 @@ class TankEnv:
         self.turret_y = (self.turret_y + turret_dy) % 360.0
 
         # 기본 타임 패널티
-        reward -= 0.01 * self.current_time
+        #reward -= 0.01 * self.current_time
 
         # 조준 유도 보상: 포탑 방향 vs 적 위치 각도
         dx = self.enemy_x - self.tank_x
@@ -72,8 +72,8 @@ class TankEnv:
 
         aim_error = self.angle_diff(self.turret_x, target_yaw)
         aim_score = 1.0 - (aim_error / 180.0)  # 0~1 사이
-        reward += 0.1 * aim_score  # 조준 유도 보상
-
+        #reward += 0.1 * aim_score  # 조준 유도 보상
+        reward = 0.1 * aim_score  # 조준 유도 보상
         # 적중 시 큰 보상
         if self.hit == 1.0:
             reward += 2.0
@@ -84,16 +84,16 @@ class TankEnv:
             hit_dist = (hit_dx + hit_dy + hit_dz) / 3.0
             reward += max(0.0, 1.0 - hit_dist / 50.0)
 
-        # 발사 시도
-        if fire > 0.0:
-            if self.cooldown_norm == 1.0:
-                self.fire_time = self.current_time
-                reward += 0.1  # 정당한 발사 보상
-            else:
-                reward -= 0.1  # 쿨타임 중 발사 패널티
+        # # 발사 시도
+        # if fire > 0.0:
+        #     if self.cooldown_norm == 1.0:
+        #         self.fire_time = self.current_time
+        #         reward += 0.1  # 정당한 발사 보상
+        #     else:
+        #         reward -= 0.1  # 쿨타임 중 발사 패널티
         done = (self.hit == 1.0) or (self.current_time > 30.0)
         state = self.get_state()
-        print("액션", action)
+        print("액션", action, "시간", self.current_time)
         print("현재 상태", state, reward)
         return state, reward, done
 

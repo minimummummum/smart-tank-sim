@@ -13,7 +13,7 @@ import time
 app = Flask(__name__)
 ############################
 # 1. Queue 늘리고 전역변수 없애기 (완료)
-# 2. reset wait 무한 대기 -> 생각해보니 시간 이런 제약말고 /init 오면 초기화 된 거니까 그거를 시점으로
+# 2. reset wait 무한 대기 -> 생각해보니 시간 이런 제약말고 /init 오면 초기화 된 거니까 그거를 시점으로 (완료)
 # 3. 생각을 좀 해봐야함. 현재 step()에서 왜 포탑 각도 갱신을 하는지? 시뮬레이터 상태를 불러와야지
 # 초기화 상태 전송, 그거에 대한 액션 반환, 액션 실행, 상태 전송, 액션 반환, 실행..
 # 초기화 -> 상태 모델 전송 -> 액션 선택 -> 시뮬레이터 액션 명령 -> 상태 모델 전송 -> 보상 처리
@@ -30,72 +30,120 @@ action_output_queue = Queue()
 detect_input_queue = Queue()
 init_input_queue = Queue()
 hit_input_queue = Queue()
+collision_input_queue = Queue()
 
 info_input_queue = Queue()
 info_output_queue = Queue()
 
 target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 # YOLO 모델 백그라운드 프로세스
-def yolo_worker(input_q, output_q):
-    model = YOLO("yolov8n.pt").to("cuda")
+def yolo_worker(yolo_input_q, yolo_output_q):
+    model = YOLO("yolov8n_test.pt").to("cuda")
+    # YOLO 프로세스 반복
     while True:
-        image = input_q.get()
-        #if image is None:
-            #break
+        # /detect request yolo_input_q에서 이미지 가져오기
+        image = yolo_input_q.get()
         results = model(image, verbose=False)
         detections = results[0].boxes.data.cpu().numpy().tolist()
-        output_q.put(detections)
+        # YOLO 결과를 yolo_output_q에 넣어 /detect로 response
+        yolo_output_q.put(detections)
 
 # action 백그라운드 프로세스
-def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q, info_input_q, info_output_q, init_input_q):
-    info_output_q.put("reset")
+def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
+                  info_input_q, info_output_q, init_input_q, collision_input_q):
     env = ppo.TankEnv()
     agent = ppo.PPOAgent(state_dim=10, action_dim=3)
     num_episodes = 1000
-    hit_data = None
-    detections = None
+    reset_flag = True
+    reset_delay_flag = False
     for episode in range(num_episodes):
-        reset_delay_flag = True
+        hit_data = None
+        detections = None
+        init_data = None
+        collision_data = None
         memory = []
         total_reward = 0
         state = None
-        env.reset()
         while True:
+            if reset_flag:
+                try:
+                    init_data = init_input_q.get(timeout=1)
+                    print("init 데이터 수신됨:", init_data)
+                except queue.Empty:
+                    init_data = None
+                    clear_queue(info_output_q)
+                    info_output_q.put({"status": "success", "control": "reset"})
+                if init_data:
+                    info_output_q.put({"status": "success", "control": "reset"})
+                    reset_flag = False
+                    init_data = None
+                    clear_queue(action_input_q, action_output_q,
+                        hit_input_q, detect_input_q,
+                        info_input_q, info_output_q,
+                        init_input_q, collision_input_q)
+                    env.reset()
+                    reset_delay_flag = True
+                continue
+
             # log data, action_request 받을 때까지 대기
             log_data = info_input_q.get()
             # log_data 없을 경우 
-            if log_data is None:
+            if not log_data:
                 print("로그 데이터 없음")
                 info_output_q.put({"status": "success", "control": ""})
                 continue
             if reset_delay_flag:
-                print("reset wait")
-                if log_data.get("time") > 30:
-                    continue
-                else:
+                if log_data.get("time") < 30.0:
                     reset_delay_flag = False
-            # 포탄 착탄 데이터 get
-            try:
-                hit_data = hit_input_q.get_nowait()
-            except queue.Empty:
-                hit_data = None
-            # detect 데이터 get
-            try:
+                else:
+                    print("초기화 대기 중...")
+                    continue
+            # /detect에서 감지된 객체가 detect_input_q로 전달됨
+            try: 
                 detections = detect_input_q.get_nowait()
+            # detect 모드가 꺼져있거나 감지된 객체가 없을 때
             except queue.Empty:
                 detections = None
+            # 감지된 객체가 있을 때
+            if detections:
+                print("객체 감지")
+                pass
+                # logic 구현
+
+            # /hit에서 포탄 충돌 정보가 hit_input_q로 전달됨
+            try: 
+                hit_data = hit_input_q.get_nowait()
+            # 충돌 정보가 없을 때
+            except queue.Empty:
+                hit_data = None
+            if hit_data:
+                print(f"포탄 충돌 정보: {hit_data}")
+                pass
+                # logic 구현
+
+            # /collision에서 충돌 정보가 collision_input_q로 전달됨
+            try:
+                collision_data = collision_input_q.get_nowait()
+            # 충돌 정보가 없을 때    
+            except queue.Empty:
+                collision_data = None
+            if collision_data:
+                print(f"충돌 정보: {collision_data}")
+                pass
+                # logic 구현
+
             # get_action 요청
             try:
                 action_request = action_input_q.get_nowait()
             except queue.Empty:
                 action_request = None
-            if action_request is None:
+            if not action_request:
                 action_output_q.put({"moveWS": {"command": "STOP", "weight": 1.0}})
                 info_output_q.put({"status": "success", "control": ""})
                 continue
+            
             # 시뮬레이터 상태를 모델에 갱신
             env.update_state(log_data, hit_data)
-            hit_data = None
             if state is None:
                 state = env.get_state()
             action, log_prob, value = agent.select_action(state)
@@ -115,17 +163,14 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q, 
             info_output_q.put({"status": "success", "control": ""})
             # 초기화
             if done:
-                info_output_q.put({"status": "success", "control": "reset"})
-                clear_queue(hit_input_q, detect_input_q, action_input_q, info_output_q, info_input_q)
-                print("reset!")
-                time.sleep(1)
+                reset_flag = True
+                print("done!")
                 break
         if len(memory) >= 2:
+            print(memory)
             agent.update(memory)
         else:
             print(f"메모리 길이 부족. 건너뜀. 현재 길이: {len(memory)}")
-        # if memory:
-        #     agent.update(memory)
         if episode % 10 == 0:
             print(f"Episode {episode}, Total Reward: {total_reward:.2f}")
             agent.save()
@@ -139,9 +184,11 @@ def detect():
     pil_image = Image.open(BytesIO(image.read()))
     np_image = np.array(pil_image)
     
-    yolo_input_queue.put(np_image)
+    yolo_input_queue.put(np_image) # YOLO 프로세스에 이미지 전달
     detections = yolo_output_queue.get()  # 결과 기다림
 
+    # 객체 결과를 detect_input_queue로 전달
+    detect_input_queue.put(detections)
     filtered_results = []
     for box in detections:
         class_id = int(box[5])
@@ -163,22 +210,33 @@ def info():
     if not data:
         return jsonify({"error": "No JSON received"}), 400
     info_input_queue.put(data)
+    #print("📨 /info data received:", data)
+    # Auto-reset after 15 seconds
+    # if data.get("time", 0) > 5:
+    #     return jsonify({"status": "success", "control": "reset"}) # "control": "pause"
+    
+    # 만약 get으로 대기 안 하고 빈 값을 return할 경우
+    # info_input_queue에 put으로 data 쌓일 수 있음.
+    # 그래서 get으로 대기하고,
+    # info_output_queue에 빈 response를 넣어 /get_action에서 대기 중인 프로세스와 동기화
     return jsonify(info_output_queue.get())
 
 @app.route('/get_action', methods=['POST'])
 def get_action():
+    # True를 넣어 action_worker가 동작하도록 함
     action_input_queue.put(True)
+    # action_output_queue에서 action을 기다림
     action = action_output_queue.get()
     return jsonify(action)
 
 @app.route('/update_bullet', methods=['POST'])
 def update_bullet():
     data = request.get_json()
-
     if not data:
         return jsonify({"status": "ERROR", "message": "Invalid request data"}), 400
+    # 포탄 충돌 정보가 hit_input_queue로 전달됨
     hit_input_queue.put(data)
-    print(f"💥 Bullet Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}")
+    #print(f"💥 Bullet Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}")
     return jsonify({"status": "OK", "message": "Bullet impact data received"})
 
 @app.route('/set_destination', methods=['POST'])
@@ -208,6 +266,7 @@ def collision():
     data = request.get_json()
     if not data:
         return jsonify({'status': 'error', 'message': 'No collision data received'}), 400
+    collision_input_queue.put(data)
 
     object_name = data.get('objectName')
     position = data.get('position', {})
@@ -215,7 +274,7 @@ def collision():
     y = position.get('y')
     z = position.get('z')
 
-    print(f"💥 Collision Detected - Object: {object_name}, Position: ({x}, {y}, {z})")
+    #print(f"💥 Collision Detected - Object: {object_name}, Position: ({x}, {y}, {z})")
 
     return jsonify({'status': 'success', 'message': 'Collision data received'})
 
@@ -241,6 +300,7 @@ def init():
         "lux": 30000
     }
     print("🛠️ Initialization config sent via /init:", config)
+    init_input_queue.put(True)
     return jsonify(config)
 
 @app.route('/start', methods=['GET'])
@@ -258,8 +318,8 @@ if __name__ == '__main__':
     action_proc = Process(target=action_worker, args=(action_input_queue, action_output_queue,
                                                       hit_input_queue, detect_input_queue,
                                                       info_input_queue, info_output_queue,
-                                                      init_input_queue))
+                                                      init_input_queue, collision_input_queue))
     yolo_proc.start()
     action_proc.start()
 
-    app.run(host='0.0.0.0', port=5005, threaded=True)
+    app.run(host='0.0.0.0', port=5010, threaded=True)
