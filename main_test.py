@@ -53,14 +53,17 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                   info_input_q, info_output_q, init_input_q, collision_input_q):
     env = ppo.TankEnv()
     agent = ppo.PPOAgent(state_dim=10, action_dim=3)
-    num_episodes = 1000
+    num_episodes = 1800
     reset_flag = True
     reset_delay_flag = False
+    global_memory = []
+    rollout_steps = 2048
     for episode in range(num_episodes):
         hit_data = None
         detections = None
         init_data = None
         collision_data = None
+        action = None
         memory = []
         total_reward = 0
         state = None
@@ -144,8 +147,18 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             
             # 시뮬레이터 상태를 모델에 갱신
             env.update_state(log_data, hit_data)
-            if state is None:
-                state = env.get_state()
+            if action is not None:
+                reward, done = env.step(action)
+                memory.append((state, action, log_prob, reward, value, done))
+                total_reward += reward
+                # 초기화
+                if done:
+                    reset_flag = True
+                    print("done!")
+                    clear_queue(init_input_q)
+                    break
+            
+            state = env.get_state()
             action, log_prob, value = agent.select_action(state)
             sim_action = {
             "moveWS": {"command": "", "weight": 0.0},
@@ -154,23 +167,13 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             "turretRF": {"command": "R" if action[1] > 0.0 else "F", "weight": float(abs(action[1]))},
             "fire": bool(action[2] > 0.0)
             }
-            print("fire:", action[2])
+            print("step", episode, "fire:", action[2])
             action_output_q.put(sim_action)
-            next_state, reward, done = env.step(action)
-            memory.append((state, action, log_prob, reward, value, done))
-            state = next_state
-            total_reward += reward
             info_output_q.put({"status": "success", "control": ""})
-            # 초기화
-            if done:
-                reset_flag = True
-                print("done!")
-                break
-        if len(memory) >= 2:
-            print(memory)
-            agent.update(memory)
-        else:
-            print(f"메모리 길이 부족. 건너뜀. 현재 길이: {len(memory)}")
+        global_memory.extend(memory)
+        if len(global_memory) > rollout_steps:
+            agent.update(global_memory[:rollout_steps])
+            global_memory = global_memory[rollout_steps:]    
         if episode % 10 == 0:
             print(f"Episode {episode}, Total Reward: {total_reward:.2f}")
             agent.save()
