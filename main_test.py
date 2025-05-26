@@ -28,7 +28,7 @@ action_input_queue = Queue()
 action_output_queue = Queue()
 
 detect_input_queue = Queue()
-
+init_input_queue = Queue()
 hit_input_queue = Queue()
 
 info_input_queue = Queue()
@@ -47,7 +47,7 @@ def yolo_worker(input_q, output_q):
         output_q.put(detections)
 
 # action 백그라운드 프로세스
-def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q, info_input_q, info_output_q):
+def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q, info_input_q, info_output_q, init_input_q):
     info_output_q.put("reset")
     env = ppo.TankEnv()
     agent = ppo.PPOAgent(state_dim=10, action_dim=3)
@@ -257,7 +257,8 @@ if __name__ == '__main__':
     yolo_proc = Process(target=yolo_worker, args=(yolo_input_queue, yolo_output_queue))
     action_proc = Process(target=action_worker, args=(action_input_queue, action_output_queue,
                                                       hit_input_queue, detect_input_queue,
-                                                      info_input_queue, info_output_queue))
+                                                      info_input_queue, info_output_queue,
+                                                      init_input_queue))
     yolo_proc.start()
     action_proc.start()
 
