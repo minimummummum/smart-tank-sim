@@ -38,18 +38,15 @@ info_output_queue = Queue()
 target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 # YOLO 모델 백그라운드 프로세스
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("yolov8n_test.pt").to("cuda")
+    model = YOLO("ntest_1.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
-        try:
-            image = yolo_input_q.get(timeout=0.2)
-            results = model(image, verbose=False)
-            detections = results[0].boxes.data.cpu().numpy().tolist()
-            # YOLO 결과를 yolo_output_q에 넣어 /detect로 response
-            yolo_output_q.put(detections)
-        except queue.Empty:
-            pass
+        image = yolo_input_q.get()
+        results = model(image, verbose=False)
+        detections = results[0].boxes.data.cpu().numpy().tolist()
+        # YOLO 결과를 yolo_output_q에 넣어 /detect로 response
+        yolo_output_q.put(detections)
 
 # action 백그라운드 프로세스
 def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
@@ -73,14 +70,14 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         while True:
             if reset_flag:
                 try:
-                    init_data = init_input_q.get(timeout=0.2)
+                    init_data = init_input_q.get_nowait()
                     print("init 데이터 수신됨:", init_data)
                 except queue.Empty:
                     init_data = None
                     clear_queue(info_output_q)
                     info_output_q.put({"status": "success", "control": "reset"})
                 if init_data:
-                    info_output_q.put({"status": "success", "control": "reset"})
+                    info_output_q.put({"status": "success", "control": ""})
                     reset_flag = False
                     init_data = None
                     clear_queue(action_input_q, action_output_q,
@@ -90,12 +87,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                     env.reset()
                     reset_delay_flag = True
                 continue
-            try:
             # log data, action_request 받을 때까지 대기
-                log_data = info_input_q.get(timeout=0.2)
-            except queue.Empty:
-                info_output_q.put({"status": "success", "control": ""})
-                continue
+            log_data = info_input_q.get()
             # log_data 없을 경우 
             if not log_data:
                 print("로그 데이터 없음")
@@ -147,7 +140,6 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             except queue.Empty:
                 action_request = None
             if not action_request:
-                action_output_q.put({"moveWS": {"command": "STOP", "weight": 1.0}})
                 info_output_q.put({"status": "success", "control": ""})
                 continue
             
@@ -162,6 +154,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                     reset_flag = True
                     print("done!")
                     clear_queue(init_input_q)
+                    info_output_q.put({"status": "success", "control": "reset"})
                     break
             
             state = env.get_state()
@@ -195,7 +188,7 @@ def detect():
     
     yolo_input_queue.put(np_image) # YOLO 프로세스에 이미지 전달
     try:
-        detections = yolo_output_queue.get(timeout=0.2)  # 결과 기다림
+        detections = yolo_output_queue.get(timeout=1)  # 결과 기다림
     except queue.Empty:
         return jsonify([])
     # 객체 결과를 detect_input_queue로 전달
@@ -231,7 +224,7 @@ def info():
     # 그래서 get으로 대기하고,
     # info_output_queue에 빈 response를 넣어 /get_action에서 대기 중인 프로세스와 동기화
     try:
-        response = info_output_queue.get(timeout=0.2)
+        response = info_output_queue.get(timeout=1)
     except queue.Empty:
         response = {"status": "success", "control": ""}
     return jsonify(response)
@@ -241,7 +234,7 @@ def get_action():
     # True를 넣어 action_worker가 동작하도록 함
     action_input_queue.put(True)
     try:
-        action = action_output_queue.get(timeout=0.2)
+        action = action_output_queue.get(timeout=1)
     except queue.Empty:
         action = {}
     return jsonify(action)
@@ -308,7 +301,7 @@ def init():
         "rdStartY": 14,
         "rdStartZ": 150,
         "trackingMode": True,
-        "detactMode": False,
+        "detactMode": True,
         "logMode": True,
         "enemyTracking": False,
         "saveSnapshot": False,
@@ -339,4 +332,4 @@ if __name__ == '__main__':
     yolo_proc.start()
     action_proc.start()
 
-    app.run(host='0.0.0.0', port=5013, threaded=True)
+    app.run(host='0.0.0.0', port=5000, threaded=True)
