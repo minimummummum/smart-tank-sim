@@ -68,8 +68,7 @@ class TankEnv:
 
         aim_error = self.angle_diff(self.turret_x, target_yaw)
         aim_score = 1.0 - (aim_error / 180.0)  # 0~1 사이
-        #reward += 0.1 * aim_score  # 조준 유도 보상
-        reward = 0.1 * aim_score  # 조준 유도 보상
+        reward += 0.1 * aim_score  # 조준 유도 보상
         # 적중 시 큰 보상
         if self.hit == 1.0:
             reward = 2.0

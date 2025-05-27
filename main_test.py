@@ -43,7 +43,7 @@ def yolo_worker(yolo_input_q, yolo_output_q):
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
         try:
-            image = yolo_input_q.get(timeout=0.5)
+            image = yolo_input_q.get(timeout=0.2)
             results = model(image, verbose=False)
             detections = results[0].boxes.data.cpu().numpy().tolist()
             # YOLO 결과를 yolo_output_q에 넣어 /detect로 response
@@ -56,7 +56,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                   info_input_q, info_output_q, init_input_q, collision_input_q):
     env = ppo.TankEnv()
     agent = ppo.PPOAgent(state_dim=10, action_dim=3)
-    num_episodes = 1800
+    num_episodes = 1000
     reset_flag = True
     reset_delay_flag = False
     global_memory = []
@@ -73,7 +73,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         while True:
             if reset_flag:
                 try:
-                    init_data = init_input_q.get(timeout=0.5)
+                    init_data = init_input_q.get(timeout=0.2)
                     print("init 데이터 수신됨:", init_data)
                 except queue.Empty:
                     init_data = None
@@ -92,7 +92,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 continue
             try:
             # log data, action_request 받을 때까지 대기
-                log_data = info_input_q.get(timeout=0.5)
+                log_data = info_input_q.get(timeout=0.2)
             except queue.Empty:
                 info_output_q.put({"status": "success", "control": ""})
                 continue
@@ -195,7 +195,7 @@ def detect():
     
     yolo_input_queue.put(np_image) # YOLO 프로세스에 이미지 전달
     try:
-        detections = yolo_output_queue.get(timeout=0.5)  # 결과 기다림
+        detections = yolo_output_queue.get(timeout=0.2)  # 결과 기다림
     except queue.Empty:
         return jsonify([])
     # 객체 결과를 detect_input_queue로 전달
@@ -231,7 +231,7 @@ def info():
     # 그래서 get으로 대기하고,
     # info_output_queue에 빈 response를 넣어 /get_action에서 대기 중인 프로세스와 동기화
     try:
-        response = info_output_queue.get(timeout=0.5)
+        response = info_output_queue.get(timeout=0.2)
     except queue.Empty:
         response = {"status": "success", "control": ""}
     return jsonify(response)
@@ -241,7 +241,7 @@ def get_action():
     # True를 넣어 action_worker가 동작하도록 함
     action_input_queue.put(True)
     try:
-        action = action_output_queue.get(timeout=0.5)
+        action = action_output_queue.get(timeout=0.2)
     except queue.Empty:
         action = {}
     return jsonify(action)
@@ -339,4 +339,4 @@ if __name__ == '__main__':
     yolo_proc.start()
     action_proc.start()
 
-    app.run(host='0.0.0.0', port=5010, threaded=True)
+    app.run(host='0.0.0.0', port=5013, threaded=True)
