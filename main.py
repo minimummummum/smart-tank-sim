@@ -28,7 +28,7 @@ info_output_queue = Queue()
 target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 # YOLO 모델 백그라운드 프로세스
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("yolov8n_test.pt").to("cuda")
+    model = YOLO("ntest_1.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
@@ -61,7 +61,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                         hit_input_queue, detect_input_queue,
                         info_input_queue, info_output_queue,
                         init_input_queue, collision_input_queue)
-            time.sleep(0.1)  # 잠시 대기
+            info_output_q.put({"status": "success", "control": ""})
             continue
             # logic 구현
 
@@ -135,8 +135,10 @@ def detect():
     np_image = np.array(pil_image)
     
     yolo_input_queue.put(np_image) # YOLO 프로세스에 이미지 전달
-    detections = yolo_output_queue.get()  # 결과 기다림
-    
+    try:
+        detections = yolo_output_queue.get(timeout=3)  # 결과 기다림
+    except queue.Empty:
+        return jsonify({})
     # 객체 결과를 detect_input_queue로 전달
     detect_input_queue.put(detections)
     filtered_results = []
@@ -169,14 +171,21 @@ def info():
     # info_input_queue에 put으로 data 쌓일 수 있음.
     # 그래서 get으로 대기하고,
     # info_output_queue에 빈 response를 넣어 /get_action에서 대기 중인 프로세스와 동기화
-    return jsonify(info_output_queue.get())
+    try:
+        response = info_output_queue.get(timeout=3)
+    except queue.Empty:
+        response = {}
+    return jsonify(response)
 
 @app.route('/get_action', methods=['POST'])
 def get_action():
     # True를 넣어 action_worker가 동작하도록 함
     action_input_queue.put(True)
     # action_output_queue에서 action을 기다림
-    action = action_output_queue.get()
+    try:
+        action = action_output_queue.get(timeout=3)
+    except queue.Empty:
+        action = {}
     return jsonify(action)
 
 @app.route('/update_bullet', methods=['POST'])
