@@ -136,7 +136,7 @@ def detect():
     
     yolo_input_queue.put(np_image) # YOLO 프로세스에 이미지 전달
     try:
-        detections = yolo_output_queue.get(timeout=3)  # 결과 기다림
+        detections = yolo_output_queue.get(timeout=1)  # 결과 기다림
     except queue.Empty:
         return jsonify({})
     # 객체 결과를 detect_input_queue로 전달
@@ -172,7 +172,7 @@ def info():
     # 그래서 get으로 대기하고,
     # info_output_queue에 빈 response를 넣어 /get_action에서 대기 중인 프로세스와 동기화
     try:
-        response = info_output_queue.get(timeout=3)
+        response = info_output_queue.get(timeout=1)
     except queue.Empty:
         response = {}
     return jsonify(response)
@@ -183,7 +183,7 @@ def get_action():
     action_input_queue.put(True)
     # action_output_queue에서 action을 기다림
     try:
-        action = action_output_queue.get(timeout=3)
+        action = action_output_queue.get(timeout=1)
     except queue.Empty:
         action = {}
     return jsonify(action)
