@@ -4,7 +4,7 @@ import torch
 from ultralytics import YOLO
 
 app = Flask(__name__)
-model = YOLO('yolov8n_test.pt')
+model = YOLO('ntest_1.pt')
 
 combined_commands = [
     {
