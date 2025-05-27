@@ -4,7 +4,7 @@ import torch
 from ultralytics import YOLO
 
 app = Flask(__name__)
-model = YOLO('yolov8n.pt')
+model = YOLO('yolov8n_test.pt')
 
 combined_commands = [
     {
@@ -105,7 +105,8 @@ def detect():
     results = model(image_path)
     detections = results[0].boxes.data.cpu().numpy()
 
-    target_classes = {0: "person", 2: "car", 7: "truck", 15: "rock"}
+    # target_classes = {0: "person", 2: "car", 7: "truck", 15: "rock"}
+    target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
     filtered_results = []
     for box in detections:
         class_id = int(box[5])
