@@ -58,34 +58,50 @@ class TankEnv:
         reward = 0.0
         turret_dx, turret_dy, fire = action
 
-        # 기본 타임 패널티
-        #reward -= 0.01 * self.current_time
+        # 1. 타임 패널티: 빠른 행동 유도
+        reward -= 0.002 * self.current_time
 
-        # 조준 유도 보상: 포탑 방향 vs 적 위치 각도
+        # 2. 조준 유도 보상: 포탑 방향 vs 적 위치 각도
         dx = self.enemy_x - self.tank_x
         dy = self.enemy_y - self.tank_y
         target_yaw = (math.degrees(math.atan2(dx, dy))) % 360.0
-
         aim_error = self.angle_diff(self.turret_x, target_yaw)
         aim_score = 1.0 - (aim_error / 180.0)  # 0~1 사이
-        reward += 0.1 * aim_score  # 조준 유도 보상
-        # 적중 시 큰 보상
+        if aim_score > 0.7:
+            reward += 0.5 * aim_score  # 조준 보상
+        else:
+            reward -= 0.5 * (1 - aim_score) ** 2
+        # # 3. 포탑 안정성 패널티: 불필요한 이동 억제
+        # action_magnitude = np.abs(turret_dx) + np.abs(turret_dy)
+        # if aim_score > 0.95:  # 조준이 거의 정확할 때
+        #     reward -= 0.1 * action_magnitude  # 패널티 감소 (0.2 → 0.1)
+        # 3. 포탑
+        # 3. 
+        
+        # 4. 적중 시 보상
         if self.hit == 1.0:
-            reward = 2.0
+            reward += 5.0  # 적중 보상 유지
         elif self.hit_x and self.hit_y and self.hit_z:
+            # 근접 적중 보상
             hit_dx = abs(self.enemy_x - self.hit_x)
             hit_dy = abs(self.enemy_y - self.hit_y)
             hit_dz = abs(self.enemy_z - self.hit_z)
-            hit_dist = (hit_dx + hit_dy + hit_dz) / 3.0
-            reward += max(0.0, 1.0 - hit_dist / 50.0)
+            hit_dist = (hit_dx ** 2 + hit_dy ** 2 + hit_dz ** 2) ** 0.5
+            max_dist = 422.73 # 환경에 따라 조정
+            reward += max(0.0, 2.0 * (1.0 - hit_dist / max_dist))  # 최대 2.0 보상
 
-        # # 발사 시도
-        # if fire > 0.0:
-        #     if self.cooldown_norm == 1.0:
-        #         self.fire_time = self.current_time
-        #         reward += 0.1  # 정당한 발사 보상
-        #     else:
-        #         reward -= 0.1  # 쿨타임 중 발사 패널티
+        # 5. 발사 시도 보상/패널티
+        if fire > 0.0:
+            if self.cooldown_norm >= 0.99:
+                self.fire_time = self.current_time
+                reward += 0.05 # 발사 시도 보상
+                if aim_score > 0.7:  # 조건 완화
+                    reward += 1.0 * aim_score  # 발사 보상 증가 (0.5 → 1.0)
+                else:
+                    reward -= 0.5 * (1 - aim_score) ** 2
+            else:
+                reward -= 0.1
+        
         done = (self.hit == 1.0) or (self.current_time > 30.0)
         print(f"보상: {reward:2f} 시간: {self.current_time:2f} 액션: {action}")
         return reward, done
@@ -121,14 +137,14 @@ class PPOAgent:
     def __init__(self, state_dim, action_dim):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.policy = Policy(state_dim, action_dim).to(self.device)
-        self.optimizer = optim.Adam(self.policy.parameters(), lr=3e-4)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=2e-4)
         self.gamma = 0.99          # 할인율
         self.lam = 0.95            # GAE 감쇠 계수
-        self.eps_clip = 0.2        # 클리핑 값
-        self.entropy_coef = 0.01   # 엔트로피 보너스 가중치
-        self.batch_size = 32
+        self.eps_clip = 0.15       # 클리핑 값
+        self.entropy_coef = 0.05   # 엔트로피 보너스 가중치
+        self.batch_size = 64
         self.epochs = 10
-
+    
     def select_action(self, state):
         state = torch.tensor(state, dtype=torch.float32).to(self.device)
         with torch.no_grad():

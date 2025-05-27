@@ -5,10 +5,12 @@ from PIL import Image
 import numpy as np
 from io import BytesIO
 import logging
-import ppo_test as ppo
+import ppo_test_grok as ppo
 import queue
 from utils import clear_queue
 import time
+import math
+import random
 
 app = Flask(__name__)
 ############################
@@ -38,7 +40,7 @@ info_output_queue = Queue()
 target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 # YOLO 모델 백그라운드 프로세스
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("ntest_1.pt").to("cuda")
+    model = YOLO("ntest_2.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
@@ -53,20 +55,22 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                   info_input_q, info_output_q, init_input_q, collision_input_q):
     env = ppo.TankEnv()
     agent = ppo.PPOAgent(state_dim=10, action_dim=3)
-    num_episodes = 1000
+    num_episodes = 900
     reset_flag = True
     reset_delay_flag = False
-    global_memory = []
-    rollout_steps = 2048
+    min_update_steps = 128
+    temp_buffer = []
+    max_memory_size = 512
     for episode in range(num_episodes):
+        memory = []
+        total_reward = 0
+        state = None
+        action = None
         hit_data = None
         detections = None
         init_data = None
         collision_data = None
-        action = None
-        memory = []
-        total_reward = 0
-        state = None
+
         while True:
             if reset_flag:
                 try:
@@ -81,12 +85,13 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                     reset_flag = False
                     init_data = None
                     clear_queue(action_input_q, action_output_q,
-                        hit_input_q, detect_input_q,
-                        info_input_q, info_output_q,
-                        init_input_q, collision_input_q)
+                                hit_input_q, detect_input_q,
+                                info_input_q, info_output_q,
+                                init_input_q, collision_input_q)
                     env.reset()
                     reset_delay_flag = True
                 continue
+
             # log data, action_request 받을 때까지 대기
             log_data = info_input_q.get()
             # log_data 없을 경우 
@@ -94,12 +99,14 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 print("로그 데이터 없음")
                 info_output_q.put({"status": "success", "control": ""})
                 continue
+
             if reset_delay_flag:
-                if log_data.get("time") < 30.0:
+                if log_data.get("time") < 60.0:
                     reset_delay_flag = False
                 else:
                     print("초기화 대기 중...")
                     continue
+
             # /detect에서 감지된 객체가 detect_input_q로 전달됨
             try: 
                 detections = detect_input_q.get_nowait()
@@ -108,7 +115,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 detections = None
             # 감지된 객체가 있을 때
             if detections:
-                print("객체 감지")
+                # print("객체 감지")
                 pass
                 # logic 구현
 
@@ -149,10 +156,17 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 reward, done = env.step(action)
                 memory.append((state, action, log_prob, reward, value, done))
                 total_reward += reward
+                if len(memory) > max_memory_size:
+                    memory = memory[-max_memory_size:]
                 # 초기화
                 if done:
+                    print(len(memory), "memory size")
+                    print(f"Episode {episode}, Total Reward: {total_reward:.2f}, Memory Size: {len(memory)}")
+                    temp_buffer.extend(memory)
+                    if len(temp_buffer) >= min_update_steps:
+                        agent.update(temp_buffer)
+                        temp_buffer = []
                     reset_flag = True
-                    print("done!")
                     clear_queue(init_input_q)
                     info_output_q.put({"status": "success", "control": "reset"})
                     break
@@ -166,13 +180,9 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             "turretRF": {"command": "R" if action[1] > 0.0 else "F", "weight": float(abs(action[1]))},
             "fire": bool(action[2] > 0.0)
             }
-            print("step", episode, "fire:", action[2])
+            print("step", episode, " ", end="")
             action_output_q.put(sim_action)
-            info_output_q.put({"status": "success", "control": ""})
-        global_memory.extend(memory)
-        if len(global_memory) > rollout_steps:
-            agent.update(global_memory[:rollout_steps])
-            global_memory = global_memory[rollout_steps:]    
+            info_output_q.put({"status": "success", "control": ""})  
         if episode % 10 == 0:
             print(f"Episode {episode}, Total Reward: {total_reward:.2f}")
             agent.save()
@@ -290,18 +300,20 @@ def collision():
 
 @app.route('/init', methods=['GET'])
 def init():
-    #x = np.random.randint(0, 300)
-    #z = np.random.randint(0, 300)
+    angle = random.uniform(0, 2 * math.pi)
+    radius = 50
+    offset_x = math.cos(angle) * radius
+    offset_z = math.sin(angle) * radius
     config = {
         "startMode": "start",  # Options: "start" or "pause"
-        "blStartX": 60,  #Blue Start Position 60
+        "blStartX": 150,  #Blue Start Position 60
         "blStartY": 10,
-        "blStartZ": 27.23, # 27.23
-        "rdStartX": 59, #Red Start Position
-        "rdStartY": 14,
-        "rdStartZ": 150,
+        "blStartZ": 150, # 27.23
+        "rdStartX": 150 + offset_x, #Red Start Position
+        "rdStartY": 10,
+        "rdStartZ": 150 + offset_z,
         "trackingMode": True,
-        "detactMode": True,
+        "detactMode": False,
         "logMode": True,
         "enemyTracking": False,
         "saveSnapshot": False,
