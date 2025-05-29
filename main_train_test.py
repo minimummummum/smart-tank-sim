@@ -11,15 +11,16 @@ from utils import clear_queue
 import time
 import math
 import random
+import torch
 
 app = Flask(__name__)
 ############################
 # 1. Queue 늘리고 전역변수 없애기 (완료)
 # 2. reset wait 무한 대기 -> 생각해보니 시간 이런 제약말고 /init 오면 초기화 된 거니까 그거를 시점으로 (완료)
-# 3. 생각을 좀 해봐야함. 현재 step()에서 왜 포탑 각도 갱신을 하는지? 시뮬레이터 상태를 불러와야지
+# 3. 생각을 좀 해봐야함. 현재 step()에서 왜 포탑 각도 갱신을 하는지? 시뮬레이터 상태를 불러와야지 (완료)
 # 초기화 상태 전송, 그거에 대한 액션 반환, 액션 실행, 상태 전송, 액션 반환, 실행..
 # 초기화 -> 상태 모델 전송 -> 액션 선택 -> 시뮬레이터 액션 명령 -> 상태 모델 전송 -> 보상 처리
-# 4. 보상설정 제대로 하기
+# 4. 보상설정 제대로 하기 (완료)
 ############################
 
 # 큐 생성
@@ -55,14 +56,12 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                   info_input_q, info_output_q, init_input_q, collision_input_q):
     env = ppo.TankEnv()
     agent = ppo.PPOAgent(state_dim=10, action_dim=3)
-    num_episodes = 900
+    agent.load()
+    num_episodes = 550
     reset_flag = True
     reset_delay_flag = False
-    min_update_steps = 128
-    temp_buffer = []
-    max_memory_size = 512
+    total_steps = 0
     for episode in range(num_episodes):
-        memory = []
         total_reward = 0
         state = None
         action = None
@@ -70,11 +69,11 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         detections = None
         init_data = None
         collision_data = None
-
+        reset_count = 0
         while True:
             if reset_flag:
                 try:
-                    init_data = init_input_q.get_nowait()
+                    init_data = init_input_q.get(timeout=2)
                     print("init 데이터 수신됨:", init_data)
                 except queue.Empty:
                     init_data = None
@@ -103,8 +102,16 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             if reset_delay_flag:
                 if log_data.get("time") < 60.0:
                     reset_delay_flag = False
+                elif reset_count >= 20:
+                    info_output_q.put({"status": "success", "control": "reset"})
+                    print("초기화 대기 시간 초과, 초기화 중단")
+                    reset_flag = True
+                    reset_delay_flag = False
+                    reset_count = 0
+                    continue
                 else:
                     print("초기화 대기 중...")
+                    reset_count += 1
                     continue
 
             # /detect에서 감지된 객체가 detect_input_q로 전달됨
@@ -153,26 +160,16 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             # 시뮬레이터 상태를 모델에 갱신
             env.update_state(log_data, hit_data)
             if action is not None:
-                reward, done = env.step(action)
-                memory.append((state, action, log_prob, reward, value, done))
-                total_reward += reward
-                if len(memory) > max_memory_size:
-                    memory = memory[-max_memory_size:]
+                _, done = env.step(action)
                 # 초기화
                 if done:
-                    print(len(memory), "memory size")
-                    print(f"Episode {episode}, Total Reward: {total_reward:.2f}, Memory Size: {len(memory)}")
-                    temp_buffer.extend(memory)
-                    if len(temp_buffer) >= min_update_steps:
-                        agent.update(temp_buffer)
-                        temp_buffer = []
                     reset_flag = True
                     clear_queue(init_input_q)
                     info_output_q.put({"status": "success", "control": "reset"})
                     break
-            
             state = env.get_state()
-            action, log_prob, value = agent.select_action(state)
+            total_steps += 1
+            action, _, _ = agent.select_action(state)
             sim_action = {
             "moveWS": {"command": "", "weight": 0.0},
             "moveAD": {"command": "", "weight": 0.0},
@@ -183,10 +180,6 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             print("step", episode, " ", end="")
             action_output_q.put(sim_action)
             info_output_q.put({"status": "success", "control": ""})  
-        if episode % 10 == 0:
-            print(f"Episode {episode}, Total Reward: {total_reward:.2f}")
-            agent.save()
-            print("torch 저장완료!")
 
 @app.route('/detect', methods=['POST'])
 def detect():
@@ -198,7 +191,7 @@ def detect():
     
     yolo_input_queue.put(np_image) # YOLO 프로세스에 이미지 전달
     try:
-        detections = yolo_output_queue.get(timeout=1)  # 결과 기다림
+        detections = yolo_output_queue.get(timeout=3)  # 결과 기다림
     except queue.Empty:
         return jsonify([])
     # 객체 결과를 detect_input_queue로 전달
@@ -301,7 +294,7 @@ def collision():
 @app.route('/init', methods=['GET'])
 def init():
     angle = random.uniform(0, 2 * math.pi)
-    radius = 50
+    radius = 40
     offset_x = math.cos(angle) * radius
     offset_z = math.sin(angle) * radius
     config = {
@@ -344,4 +337,4 @@ if __name__ == '__main__':
     yolo_proc.start()
     action_proc.start()
 
-    app.run(host='0.0.0.0', port=5000, threaded=True)
+    app.run(host='0.0.0.0', port=5002, threaded=True)

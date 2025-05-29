@@ -8,7 +8,7 @@ import numpy as np
 from io import BytesIO
 
 app = Flask(__name__)
-model = YOLO('yolov8n.pt')
+model = YOLO('best.pt')
 
 combined_commands = [
     {
