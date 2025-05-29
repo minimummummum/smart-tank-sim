@@ -63,8 +63,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     temp_buffer = []
     max_memory_size = 512
     total_steps = 0
-    warmup_episodes = int(num_episodes * 0.05)
-    transition_episodes = int(num_episodes * 0.15)
+    warmup_episodes = int(num_episodes * 0.03)
+    transition_episodes = int(num_episodes * 0.07)
     for episode in range(num_episodes):
         memory = []
         total_reward = 0
