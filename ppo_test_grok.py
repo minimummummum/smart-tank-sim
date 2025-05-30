@@ -77,29 +77,8 @@ class TankEnv:
         yaw_error = self.angle_diff(self.turret_x, target_yaw)
         pitch_error = target_pitch - self.turret_y
 
-        if yaw_error > 2.0:
-            turret_dx = random.uniform(0.1, 1.0)
-        elif 1.0 < yaw_error <= 2.0:
-            turret_dx = random.uniform(0.05, 0.1)
-        elif -2.0 < yaw_error < -1.0:
-            turret_dx = random.uniform(-0.1, -0.05)
-        elif yaw_error <= -2.0:
-            turret_dx = random.uniform(-1.0, -0.1)
-        else:
-            turret_dx = 0.0
-
-        if pitch_error > 2.0:
-            turret_dy = random.uniform(0.1, 1.0)
-        elif 1.0 < pitch_error <= 2.0:
-            turret_dy = random.uniform(0.05, 0.1)
-        elif -2.0 < pitch_error < -1.0:
-            turret_dy = random.uniform(-0.1, -0.05)
-        elif pitch_error <= -2.0:
-            turret_dy = random.uniform(-1.0, -0.1)
-        else:
-            turret_dy = 0.0
-        #turret_dx = random.uniform(0.1, 1.0) if yaw_error > 2.0 else (random.uniform(-1.0, -0.1) if yaw_error < -2.0 else random.uniform(-0.05, 0.05))
-        #turret_dy = random.uniform(0.1, 1.0) if pitch_error > 2.0 else (random.uniform(-1.0, -0.1) if pitch_error < -2.0 else random.uniform(-0.05, 0.05))
+        turret_dx = random.uniform(0.1, 1.0) if yaw_error > 2.0 else (random.uniform(-1.0, -0.1) if yaw_error < -2.0 else random.uniform(-0.05, 0.05))
+        turret_dy = random.uniform(0.1, 1.0) if pitch_error > 2.0 else (random.uniform(-1.0, -0.1) if pitch_error < -2.0 else random.uniform(-0.05, 0.05))
         fire = 1.0 if abs(yaw_error) < 2.0 and abs(pitch_error) < 2.0 and self.cooldown_norm >= 0.99 else 0.0
         return np.array([turret_dx, turret_dy, fire], dtype=np.float32)
     
@@ -163,8 +142,11 @@ class Policy(nn.Module):
     def forward(self, x):
             x = self.shared(x)
             mean = self.actor_mean(x)
-            log_std = torch.clamp(self.actor_log_std, -1.5, 0.0)  # log_std 범위 조정
-            std = log_std.exp()  # std는 약 0.223 ~ 1.0
+            min_std = 0.3
+            std = torch.exp(self.actor_log_std)
+            std = torch.clamp(std, min=min_std)
+            # log_std = torch.clamp(self.actor_log_std, -1.5, 0.0)  # log_std 범위 조정
+            # std = log_std.exp()  # std는 약 0.223 ~ 1.0
             if not torch.all(torch.isfinite(mean)):
                 print(f"Warning: Invalid mean: {mean}")
                 raise ValueError("Invalid mean")
