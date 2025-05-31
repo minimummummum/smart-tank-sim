@@ -190,7 +190,7 @@ class DQNAgent:
         torch.save(self.q_net.state_dict(), save_path)
         print(f"Saved model to {save_path}")
 
-    def load(self, path='dqn_model/dqn_tank_106.pth'):
+    def load(self, path='dqn_model/dqn_tank.pth'):
         self.q_net.load_state_dict(torch.load(path))
         self.target_net.load_state_dict(self.q_net.state_dict())
 

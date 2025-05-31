@@ -5,7 +5,7 @@ from PIL import Image
 import numpy as np
 from io import BytesIO
 import logging
-import dqn_test as dqn
+import dqn_train as dqn
 import queue
 from utils import clear_queue
 import time

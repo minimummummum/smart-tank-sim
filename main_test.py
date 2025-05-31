@@ -5,7 +5,7 @@ from PIL import Image
 import numpy as np
 from io import BytesIO
 import logging
-import ppo_test_grok as ppo
+import dqn_test as dqn
 import queue
 from utils import clear_queue
 import time
@@ -54,28 +54,44 @@ def yolo_worker(yolo_input_q, yolo_output_q):
 # action 백그라운드 프로세스
 def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                   info_input_q, info_output_q, init_input_q, collision_input_q):
+    action_list = [[-1, -1, 0],
+                    [-1, 0, 0],
+                    [-1, 1, 0],
+                    [0, -1, 0],
+                    [0, 0, 0],
+                    [0, 1, 0],
+                    [1, -1, 0],
+                    [1, 0, 0],
+                    [1, 1, 0],
+                    [-1, -1, 1],
+                    [-1, 0, 1],
+                    [-1, 1, 1],
+                    [0, -1, 1],
+                    [0, 0, 1],
+                    [0, 1, 1],
+                    [1, -1, 1],
+                    [1, 0, 1],
+                    [1, 1, 1]]
     num_episodes = 1000
-    env = ppo.TankEnv()
-    agent = ppo.PPOAgent(state_dim=12, action_dim=3, total_episodes_max = num_episodes)
-
+    epsilon_start = 1.0
+    epsilon_final = 0.01
+    epsilon_decay = 0.995
+    env = dqn.TankEnv()
+    agent = dqn.DQNAgent(state_dim=12, action_dim=18)
+    agent.load()
     reset_flag = True
     reset_delay_flag = False
-    min_update_steps = 128
-    temp_buffer = []
-    max_memory_size = 512
-    total_steps = 0
-    warmup_episodes = int(num_episodes * 0.1)
-    transition_episodes = int(num_episodes * 0.01)
     for episode in range(num_episodes):
-        memory = []
-        total_reward = 0
-        state = None
+        next_state = None
         action = None
         hit_data = None
         detections = None
         init_data = None
         collision_data = None
         reset_count = 0
+        total_reward = 0
+        steps = 0
+        epsilon = 0
         while True:
             if reset_flag:
                 try:
@@ -118,6 +134,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 else:
                     print("초기화 대기 중...")
                     reset_count += 1
+                    time.sleep(0.1)
                     continue
 
             # /detect에서 감지된 객체가 detect_input_q로 전달됨
@@ -167,74 +184,34 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             env.update_state(log_data, hit_data)
             if action is not None:
                 reward, done = env.step(action)
-                memory.append((state, action, log_prob, reward, value, done))
+                next_state = env.get_state()
+                agent.memory.push((state, action, reward, next_state, done))
+                state = next_state
                 total_reward += reward
-                if len(memory) > max_memory_size:
-                    memory = memory[-max_memory_size:]
                 # 초기화
                 if done:
-                    print(len(memory), "memory size")
-                    print(f"Episode {episode}, Total Reward: {total_reward:.2f}, Memory Size: {len(memory)}")
-                    temp_buffer.extend(memory)
-                    if len(memory) >= min_update_steps:
-                        agent.update(memory, total_steps)
+                    print(f"Episode {episode} - Total Reward: {total_reward} - Epsilon: {epsilon:.3f}")
                     reset_flag = True
                     clear_queue(init_input_q)
                     info_output_q.put({"status": "success", "control": "reset"})
                     break
-            
-            state = env.get_state()
-            total_steps += 1
-            if episode < warmup_episodes:
-                action = env.scripted_action()
-                state_tensor = torch.tensor(state, dtype=torch.float32).to(agent.device)
-                dist, _, value = agent.policy(state_tensor)
-
-                epsilon = 1e-4
-                action_tensor = torch.tensor(action, dtype=torch.float32).to(agent.device)
-                u = 0.5 * torch.log((1 + action_tensor) / (1 - action_tensor + epsilon))
-                log_prob = dist.log_prob(u).sum()
-                log_prob -= torch.sum(torch.log(torch.clamp(1 - action_tensor.pow(2), min=epsilon, max=1.0)))
-                log_prob = torch.clamp(log_prob, min=-50.0, max=0.0).item()  # log_prob 제한
-                value = value.item()
-                print(f"Scripted Action 중입니다. (Step {total_steps}): {action}, log_prob: {log_prob}")
-            elif episode < warmup_episodes + transition_episodes:
-                p_scripted = np.exp(-5.0 * (episode - warmup_episodes) / transition_episodes)
-                if random.random() < p_scripted:
-                    action = env.scripted_action()
-                    state_tensor = torch.tensor(state, dtype=torch.float32).to(agent.device)
-                    dist, _, value = agent.policy(state_tensor)
-
-                    epsilon = 1e-4
-                    action_tensor = torch.tensor(action, dtype=torch.float32).to(agent.device)
-                    u = 0.5 * torch.log((1 + action_tensor) / (1 - action_tensor + epsilon))
-                    log_prob = dist.log_prob(u).sum()
-                    log_prob -= torch.sum(torch.log(torch.clamp(1 - action_tensor.pow(2), min=epsilon, max=1.0)))
-                    log_prob = torch.clamp(log_prob, min=-50.0, max=0.0).item()  # log_prob 제한
-                    value = value.item()
-                    print(f"Scripted Action 중입니다. (Step {total_steps}): {action}, log_prob: {log_prob}")
-                else:
-                    action, log_prob, value = agent.select_action(state)
-                    print(f"PPO Selection Action 중입니다. (Step {total_steps}): {action}, log_prob: {log_prob}")
-            else:
-                action, log_prob, value = agent.select_action(state)
-                print(f"PPO Selection Action 중입니다. (Step {total_steps}): {action}, log_prob: {log_prob}")
-            # action, log_prob, value = agent.select_action(state)
-            # print(f"PPO Selection Action 중입니다. (Step {total_steps}): {action}, log_prob: {log_prob}")
+                agent.update()
+            if next_state is None:
+                state = env.get_state()
+            steps += 1
+            action = agent.select_action(state, epsilon)
+            print(f"DQN Selection Action 중입니다. (Step {steps}): {action}")
+            actions = action_list[action]
             sim_action = {
-            "moveWS": {"command": "", "weight": 0.0},
-            "moveAD": {"command": "", "weight": 0.0},
-            "turretQE": {"command": "Q" if action[0] > 0.0 else "E", "weight": float(abs(action[0]))},
-            "turretRF": {"command": "R" if action[1] > 0.0 else "F", "weight": float(abs(action[1]))},
-            "fire": bool(action[2] > 0.0)
+            "moveWS": {"command": "", "weight": 0},
+            "moveAD": {"command": "", "weight": 0},
+            "turretQE": {"command": "Q" if actions[0] > 0 else "E", "weight": abs(actions[0])/2},
+            "turretRF": {"command": "R" if actions[1] > 0 else "F", "weight": abs(actions[1])/2},
+            "fire": bool(actions[2])
             }
             print("step", episode, " ", end="")
             action_output_q.put(sim_action)
             info_output_q.put({"status": "success", "control": ""})  
-        if episode % 10 == 0:
-            print(f"Episode {episode}, Total Reward: {total_reward:.2f}")
-            agent.save()
-            print("torch 저장완료!")
 
 @app.route('/detect', methods=['POST'])
 def detect():
