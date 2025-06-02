@@ -378,8 +378,8 @@ class TankEnv:
             hit_dy = abs(self.enemy_y - self.hit_y)
             hit_dz = abs(self.enemy_z - self.hit_z)
             hit_dist = (hit_dx ** 2 + hit_dy ** 2 + hit_dz ** 2) ** 0.5
-            max_dist = 150
-            reward += 10.0 * (1.0 - hit_dist / max_dist)
+            max_dist = 100.0
+            reward += 10 * (1.0 - hit_dist / max_dist)
         distance = np.sqrt(dx**2 + dz**2)
         if distance > 130.0:
             reward -= 5.0

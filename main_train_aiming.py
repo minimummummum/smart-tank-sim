@@ -64,7 +64,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                     [1, 0, 0],
                     [1, 1, 0],
                     [0, 0, 1]]  # moveWS, moveAD, turretQE, turretRF, fire
-    num_episodes = 1000
+    num_episodes = 3000
     epsilon_start = 1.0
     epsilon_final = 0.01
     epsilon_decay = 0.995
@@ -72,8 +72,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     agent = dqn.DQNAgent(state_dim=11, action_dim=10)
     reset_flag = True
     reset_delay_flag = False
-    warmup_episodes = int(num_episodes * 0.05)
-    transition_episodes = int(num_episodes * 0.05)
+    warmup_episodes = int(num_episodes * 0.02)
+    transition_episodes = int(num_episodes * 0.03)
     for episode in range(num_episodes):
         next_state = None
         action = None
