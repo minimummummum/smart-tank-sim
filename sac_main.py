@@ -5,7 +5,7 @@ from PIL import Image
 import numpy as np
 from io import BytesIO
 import logging
-import dqn_train_aiming as dqn
+import sac_train as sac
 import queue
 from utils import clear_queue
 import time
@@ -38,7 +38,7 @@ collision_input_queue = Queue()
 info_input_queue = Queue()
 info_output_queue = Queue()
 
-target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
+target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
 # YOLO 모델 백그라운드 프로세스
 def yolo_worker(yolo_input_q, yolo_output_q):
     model = YOLO("ntest_2.pt").to("cuda")
@@ -54,24 +54,9 @@ def yolo_worker(yolo_input_q, yolo_output_q):
 # action 백그라운드 프로세스
 def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                   info_input_q, info_output_q, init_input_q, collision_input_q):
-    action_list = [[-1, -1, 0],
-                    [-1, 0, 0],
-                    [-1, 1, 0],
-                    [0, -1, 0],
-                    [0, 0, 0],
-                    [0, 1, 0],
-                    [1, -1, 0],
-                    [1, 0, 0],
-                    [1, 1, 0],
-                    [0, 0, 1]]  # moveWS, moveAD, turretQE, turretRF, fire
     num_episodes = 1500
-    epsilon_start = 1.0
-    epsilon_final = 0.01
-    epsilon_decay = 0.995
-    env = dqn.TankEnv()
-    agent = dqn.DQNAgent(state_dim=12, action_dim=10)
-    agent.load()  # 모델 불러오기
-    agent.memory.load()  # 메모리 불러오기
+    env = sac.TankEnv()
+    agent = sac.SAC(state_dim=11, action_dim=3)
     reset_flag = True
     reset_delay_flag = False
     warmup_episodes = int(num_episodes * 0.01)
@@ -86,11 +71,6 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         reset_count = 0
         total_reward = 0
         steps = 0
-        epsilon = epsilon_final + (epsilon_start - epsilon_final) * math.exp(-1. * episode / epsilon_decay)
-        moveWS = np.random.choice(["W", "S"])
-        moveAD = np.random.choice(["A", "D"])
-        weightWS = random.uniform(0.5, 1.0)
-        weightAD = random.uniform(0.2, 0.5)
         while True:
             if reset_flag:
                 try:
@@ -181,19 +161,19 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             if env.update_state(log_data, hit_data):
                 hit_data = None
             if action is not None:
-                reward, done = env.step()
+                reward, done = env.step(action)
                 next_state = env.get_state()
-                agent.memory.push((state, action, reward, next_state, done))
+                agent.replay_buffer.push(state, action, reward, next_state, done)
                 state = next_state
                 total_reward += reward
+                agent.update(128)
                 # 초기화
                 if done:
-                    print(f"Episode {episode} - Total Reward: {total_reward} - Epsilon: {epsilon:.3f}")
+                    print(f"Episode {episode} - Total Reward: {total_reward}")
                     reset_flag = True
                     clear_queue(init_input_q)
                     info_output_q.put({"status": "success", "control": "reset"})
                     break
-                agent.update()
             if next_state is None:
                 state = env.get_state()
             steps += 1
@@ -206,19 +186,18 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                     action = env.scripted_action()
                     print(f"Scripted Action 중입니다. (Step {steps}): {action}")
                 else:
-                    action = agent.select_action(state, epsilon)
-                    print(f"DQN Selection Action 중입니다. (Step {steps}): {action}")
+                    action = agent.select_action(state)
+                    print(f"SAC Selection Action 중입니다. (Step {steps}): {action}")
             else:
-                action = agent.select_action(state, epsilon)
-                print(f"DQN Selection Action 중입니다. (Step {steps}): {action}")
-            actions = action_list[action]
-            
+                action = agent.select_action(state)
+                print(f"SAC Selection Action 중입니다. (Step {steps}): {action}")
+            action = action.tolist()
             sim_action = {
-            "moveWS": {"command": moveWS, "weight": weightWS},
-            "moveAD": {"command": moveAD, "weight": weightAD},
-            "turretQE": {"command": "Q" if actions[0] > 0 else "E", "weight": abs(actions[0])},
-            "turretRF": {"command": "R" if actions[1] > 0 else "F", "weight": abs(actions[1])},
-            "fire": bool(actions[2])
+            "moveWS": {"command": "", "weight": 0.0},
+            "moveAD": {"command": "", "weight": 0.0},
+            "turretQE": {"command": "Q" if action[0] > 0 else "E", "weight": abs(action[0])},
+            "turretRF": {"command": "R" if action[1] > 0 else "F", "weight": abs(action[1])},
+            "fire": action[2] > 0.0
             }
             print("step", episode, " ", end="")
             action_output_q.put(sim_action)
@@ -227,7 +206,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             print(f"Episode {episode}, Total Reward: {total_reward:.2f}")
             agent.save()
             print("model 저장완료!")
-            agent.memory.save()
+            agent.replay_buffer.save()
             print("buffer 저장완료!")
 
 @app.route('/detect', methods=['POST'])
