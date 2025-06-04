@@ -322,7 +322,7 @@ def collision():
 @app.route('/init', methods=['GET'])
 def init():
     angle = random.uniform(0, 2 * math.pi)
-    radius = random.randint(10, 90)
+    radius = random.randint(10, 80)
     offset_x = math.cos(angle) * radius
     offset_z = math.sin(angle) * radius
     config = {
