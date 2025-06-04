@@ -64,16 +64,18 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                     [1, 0, 0],
                     [1, 1, 0],
                     [0, 0, 1]]  # moveWS, moveAD, turretQE, turretRF, fire
-    num_episodes = 3000
+    num_episodes = 1500
     epsilon_start = 1.0
     epsilon_final = 0.01
     epsilon_decay = 0.995
     env = dqn.TankEnv()
-    agent = dqn.DQNAgent(state_dim=11, action_dim=10)
+    agent = dqn.DQNAgent(state_dim=12, action_dim=10)
+    agent.load()  # 모델 불러오기
+    agent.memory.load()  # 메모리 불러오기
     reset_flag = True
     reset_delay_flag = False
-    warmup_episodes = int(num_episodes * 0.02)
-    transition_episodes = int(num_episodes * 0.03)
+    warmup_episodes = int(num_episodes * 0.01)
+    transition_episodes = int(num_episodes * 0.01)
     for episode in range(num_episodes):
         next_state = None
         action = None

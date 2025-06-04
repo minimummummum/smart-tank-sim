@@ -102,7 +102,7 @@ class PrioritizedReplayBuffer:
                 pickle.dump(data, f)
             print(f"Saved replay buffer to {save_path}")
 
-    def load(self, path='dqn_model_aiming/replay_buffer.pkl'):
+    def load(self, path='dqn_model_aiming/replay_buffer_240.pkl'):
         """리플레이 버퍼를 파일에서 로드"""
         if not os.path.exists(path):
             print(f"No replay buffer found at {path}")
@@ -140,7 +140,7 @@ class DQNAgent:
         self.target_net = DuelingDQN(state_dim, action_dim).to(self.device)
         self.target_net.load_state_dict(self.q_net.state_dict())
         self.optimizer = optim.Adam(self.q_net.parameters(), lr=1e-3)
-        self.memory = PrioritizedReplayBuffer(10000)
+        self.memory = PrioritizedReplayBuffer(500000)
         self.batch_size = 64
         self.gamma = 0.99
         self.tau = 0.005
@@ -198,7 +198,7 @@ class DQNAgent:
         torch.save(self.q_net.state_dict(), save_path)
         print(f"Saved model to {save_path}")
 
-    def load(self, path='dqn_model_aiming/dqn_tank.pth'):
+    def load(self, path='dqn_model_aiming/dqn_tank_240.pth'):
         self.q_net.load_state_dict(torch.load(path))
         self.target_net.load_state_dict(self.q_net.state_dict())
 
@@ -285,7 +285,7 @@ class TankEnv:
             distance/424.26, yaw_error/180.0,
             np.sin(np.radians(self.turret_x)), np.cos(np.radians(self.turret_x)),
             np.sin(np.radians(self.turret_y)), np.cos(np.radians(self.turret_y)),
-            hit_dx, hit_dz
+            hit_dx, hit_dz, self.cooldown_norm
         ], dtype=np.float32)
         return state
 
@@ -328,9 +328,9 @@ class TankEnv:
         factor = 733.74  # 상수 값 (앞에서 계산한 근사치) 733.74
         arg = (2 * d) / factor
         # arg 값이 [-1, 1] 범위에 있어야 함
-        if abs(arg) > 1.0:
+        #if abs(arg) > 1.0:
             # 발사 불가능 거리, pitch=0 (평사)
-            return 0.0
+            #return 0.0
         pitch_rad = 0.5 * math.asin(arg)
         return math.degrees(pitch_rad)
     def angle_diff(self, a, b):
@@ -386,6 +386,6 @@ class TankEnv:
         # 5. 보상 정규화
         reward = np.clip(reward, -10.0, 10.0)
 
-        done = (self.hit == 1.0) or (self.current_time > 60.0) or reward > 9.9 or distance > 200.0
+        done = (self.hit == 1.0) or (self.current_time > 60.0) or distance > 200.0
         print(f"보상: {reward:.2f}, 시간: {self.current_time:.2f}")
         return reward, done
