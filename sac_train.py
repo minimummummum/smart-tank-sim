@@ -329,8 +329,21 @@ class TankEnv:
         target_pitch = self.invert_pitch_from_impact_distance(distance)
         yaw_error = self.angle_diff(self.turret_x, target_yaw)
         pitch_error = target_pitch - self.turret_y
-
-        turret_dx = random.uniform(0.1, 1.0) if yaw_error > 2.0 else (random.uniform(-1.0, -0.1) if yaw_error < -2.0 else random.uniform(-0.05, 0.05))
+        if yaw_error > 30:
+            turret_dx = 1.0
+        elif yaw_error < -30:
+            turret_dx = -1.0
+        elif yaw_error > 10:
+            turret_dx = random.uniform(0.3, 0.7)
+        elif yaw_error < -10:
+            turret_dx = random.uniform(-0.3, -0.7)
+        elif yaw_error > 2:
+            turret_dx = random.uniform(0.1, 0.3)
+        elif yaw_error < -2:
+            turret_dx = random.uniform(-0.1, -0.3)
+        else:
+            turret_dx = random.uniform(-0.05, 0.05)
+        #turret_dx = random.uniform(0.1, 1.0) if yaw_error > 2.0 else (random.uniform(-1.0, -0.1) if yaw_error < -2.0 else random.uniform(-0.05, 0.05))
         turret_dy = random.uniform(0.1, 1.0) if pitch_error > 2.0 else (random.uniform(-1.0, -0.1) if pitch_error < -2.0 else random.uniform(-0.05, 0.05))
         fire = 1.0 if abs(yaw_error) < 2.0 and abs(pitch_error) < 2.0 and self.cooldown_norm == 1.0 else 0.0
         return np.array([turret_dx, turret_dy, fire], dtype=np.float32)

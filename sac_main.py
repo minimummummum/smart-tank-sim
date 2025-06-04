@@ -54,7 +54,7 @@ def yolo_worker(yolo_input_q, yolo_output_q):
 # action 백그라운드 프로세스
 def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                   info_input_q, info_output_q, init_input_q, collision_input_q):
-    num_episodes = 1500
+    num_episodes = 3000
     env = sac.TankEnv()
     agent = sac.SAC(state_dim=11, action_dim=3)
     reset_flag = True
@@ -322,7 +322,7 @@ def collision():
 @app.route('/init', methods=['GET'])
 def init():
     angle = random.uniform(0, 2 * math.pi)
-    radius = random.randint(40, 80)
+    radius = random.randint(10, 90)
     offset_x = math.cos(angle) * radius
     offset_z = math.sin(angle) * radius
     config = {
