@@ -179,18 +179,18 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             steps += 1
             if episode < warmup_episodes:
                 action = env.scripted_action()
-                print(f"Scripted Action 중입니다. (Step {steps}): {action}")
+                print(f"Scripted Action 중입니다. (Step {steps}): {action}, {state}")
             elif episode < warmup_episodes + transition_episodes:
                 p_scripted = np.exp(-5.0 * (episode - warmup_episodes) / transition_episodes)
                 if random.random() < p_scripted:
                     action = env.scripted_action()
-                    print(f"Scripted Action 중입니다. (Step {steps}): {action}")
+                    print(f"Scripted Action 중입니다. (Step {steps}): {action}, {state}")
                 else:
                     action = agent.select_action(state)
-                    print(f"SAC Selection Action 중입니다. (Step {steps}): {action}")
+                    print(f"SAC Selection Action 중입니다. (Step {steps}): {action}, {state}")
             else:
                 action = agent.select_action(state)
-                print(f"SAC Selection Action 중입니다. (Step {steps}): {action}")
+                print(f"SAC Selection Action 중입니다. (Step {steps}): {action}, {state}")
             action = action.tolist()
             sim_action = {
             "moveWS": {"command": "", "weight": 0.0},

@@ -292,19 +292,18 @@ class TankEnv:
         return (angle + np.pi) % (2 * np.pi) - np.pi
 
     def compute_relative_state_with_enemy_motion(self, my_yaw_deg, enemy_yaw_deg, enemy_speed):
+        if enemy_speed < 0.0:
+            enemy_speed = 0.0
         my_yaw = np.deg2rad(my_yaw_deg)
         enemy_yaw = np.deg2rad(enemy_yaw_deg)
 
         enemy_vx = enemy_speed * np.cos(enemy_yaw)
         enemy_vz = enemy_speed * np.sin(enemy_yaw)
 
-        rel_vx = enemy_vx
-        rel_vz = enemy_vz
-
         cos_yaw = np.cos(-my_yaw)
         sin_yaw = np.sin(-my_yaw)
-        relative_vx = rel_vx * cos_yaw - rel_vz * sin_yaw
-        relative_vz = rel_vx * sin_yaw + rel_vz * cos_yaw
+        relative_vx = enemy_vx * cos_yaw - enemy_vz * sin_yaw
+        relative_vz = enemy_vx * sin_yaw + enemy_vz * cos_yaw
 
         relative_vx /= 70.0
         relative_vz /= 70.0
@@ -329,10 +328,40 @@ class TankEnv:
         target_pitch = self.invert_pitch_from_impact_distance(distance)
         yaw_error = self.angle_diff(self.turret_x, target_yaw)
         pitch_error = target_pitch - self.turret_y
+        if yaw_error > 30:
+            turret_dx = 1.0
+        elif yaw_error < -30:
+            turret_dx = -1.0
+        elif yaw_error > 10:
+            turret_dx = random.uniform(0.3, 0.7)
+        elif yaw_error < -10:
+            turret_dx = random.uniform(-0.3, -0.7)
+        elif yaw_error > 2:
+            turret_dx = random.uniform(0.1, 0.3)
+        elif yaw_error < -2:
+            turret_dx = random.uniform(-0.1, -0.3)
+        elif yaw_error > 1:
+            turret_dx = random.uniform(0.0, 0.05)
+        elif yaw_error < -1:
+            turret_dx = random.uniform(0.0, -0.05)
+        else:
+            turret_dx = 0.0
+        if pitch_error > 10:
+            turret_dy = 1.0
+        elif pitch_error < -10:
+            turret_dy = -1.0
+        elif pitch_error > 2:
+            turret_dy = random.uniform(0.3, 0.7)
+        elif pitch_error < -2:
+            turret_dy = random.uniform(-0.3, -0.7)
+        elif pitch_error > 1:
+            turret_dy = random.uniform(0.0, 0.1)
+        elif pitch_error < -1:
+            turret_dy = random.uniform(0.0, -0.1)
+        else:
+            turret_dy = 0.0
 
-        turret_dx = random.uniform(0.1, 1.0) if yaw_error > 2.0 else (random.uniform(-1.0, -0.1) if yaw_error < -2.0 else random.uniform(-0.05, 0.05))
-        turret_dy = random.uniform(0.1, 1.0) if pitch_error > 2.0 else (random.uniform(-1.0, -0.1) if pitch_error < -2.0 else random.uniform(-0.05, 0.05))
-        fire = 1.0 if abs(yaw_error) < 2.0 and abs(pitch_error) < 2.0 and self.cooldown_norm == 1.0 else 0.0
+        fire = 1.0 if abs(yaw_error) < 2.0 and abs(pitch_error) < 2.0 and self.cooldown_norm == 1.0 else -1.0
         return np.array([turret_dx, turret_dy, fire], dtype=np.float32)
 
     def step(self, action):
