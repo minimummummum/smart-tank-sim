@@ -269,7 +269,10 @@ class TankEnv:
         dz = self.enemy_z - self.tank_z
         distance = math.sqrt(dx**2 + dz**2)
         target_yaw = (math.degrees(math.atan2(dx, dz))) % 360.0
+        target_pitch = self.invert_pitch_from_impact_distance(distance)
+        pitch_error = target_pitch - self.turret_y
         yaw_error = self.angle_diff(self.turret_x, target_yaw)
+        
         if self.hit_x and self.hit_z:
             hit_dx = self.hit_x - self.enemy_x
             hit_dz = self.hit_z - self.enemy_z
@@ -280,11 +283,11 @@ class TankEnv:
             hit_dx = 0.0
             hit_dz = 0.0
         state = np.array([
-            yaw_error/180.0, distance/math.sqrt(300**2 + 300**2),
+            yaw_error/180.0, pitch_error/15.0, distance/math.sqrt(300**2 + 300**2),
             relative_vx, relative_vz,
             np.sin(np.radians(self.turret_x)), np.cos(np.radians(self.turret_x)),
             np.sin(np.radians(self.turret_y)), np.cos(np.radians(self.turret_y)),
-            hit_dx, hit_dz, self.cooldown_norm
+            self.cooldown_norm # hit_dx, hit_dz 임시로 뺌
         ], dtype=np.float32)
         return state
 
@@ -346,9 +349,9 @@ class TankEnv:
             turret_dx = random.uniform(0.0, -0.05)
         else:
             turret_dx = 0.0
-        if pitch_error > 10:
+        if pitch_error > 5:
             turret_dy = 1.0
-        elif pitch_error < -10:
+        elif pitch_error < -5:
             turret_dy = -1.0
         elif pitch_error > 2:
             turret_dy = random.uniform(0.3, 0.7)
@@ -371,10 +374,15 @@ class TankEnv:
         reward -= min(0.5 * np.log1p(self.current_time), 2.0)
         dx = self.enemy_x - self.tank_x
         dz = self.enemy_z - self.tank_z
+        distance = math.sqrt(dx**2 + dz**2)
         target_yaw = (math.degrees(math.atan2(dx, dz))) % 360.0
         aim_error = abs(self.angle_diff(self.turret_x, target_yaw))
         aim_score = min(0.9,1.0 - (aim_error / 180.0))
-        reward += (aim_score - 0.5) * 5.0
+        reward += (aim_score - 0.5) * 3.0
+        target_pitch = self.invert_pitch_from_impact_distance(distance)
+        pitch_error = abs(target_pitch - self.turret_y)
+        pitch_score = min(0.9, 1.0 - (pitch_error/15.0))
+        reward += (pitch_score - 0.5) * 2.0
         if self.hit == 1.0:
             reward += 10.0
         elif self.hit_x and self.hit_z:

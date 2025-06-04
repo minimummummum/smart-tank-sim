@@ -54,13 +54,13 @@ def yolo_worker(yolo_input_q, yolo_output_q):
 # action 백그라운드 프로세스
 def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                   info_input_q, info_output_q, init_input_q, collision_input_q):
-    num_episodes = 1500
+    num_episodes = 1000
     env = sac.TankEnv()
-    agent = sac.SAC(state_dim=11, action_dim=3)
+    agent = sac.SAC(state_dim=10, action_dim=3) # hit_dx,dz 임시로 뺌 pitch_error 넣음
     reset_flag = True
     reset_delay_flag = False
     warmup_episodes = int(num_episodes * 0.01)
-    transition_episodes = int(num_episodes * 0.01)
+    transition_episodes = int(num_episodes * 0.005)
     for episode in range(num_episodes):
         next_state = None
         action = None
