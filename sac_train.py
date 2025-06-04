@@ -347,9 +347,24 @@ class TankEnv:
             turret_dx = random.uniform(0.0, -0.05)
         else:
             turret_dx = 0.0
+        if pitch_error > 10:
+            turret_dy = 1.0
+        elif pitch_error < -10:
+            turret_dy = -1.0
+        elif pitch_error > 2:
+            turret_dy = random.uniform(0.3, 0.7)
+        elif pitch_error < -2:
+            turret_dy = random.uniform(-0.3, -0.7)
+        elif pitch_error > 1:
+            turret_dy = random.uniform(0.0, 0.1)
+        elif pitch_error < -1:
+            turret_dy = random.uniform(0.0, -0.1)
+        else:
+            turret_dy = 0.0
+            
         #turret_dx = random.uniform(0.1, 1.0) if yaw_error > 2.0 else (random.uniform(-1.0, -0.1) if yaw_error < -2.0 else random.uniform(-0.05, 0.05))
         turret_dy = random.uniform(0.1, 1.0) if pitch_error > 2.0 else (random.uniform(-1.0, -0.1) if pitch_error < -2.0 else random.uniform(-0.05, 0.05))
-        fire = 1.0 if abs(yaw_error) < 2.0 and abs(pitch_error) < 2.0 and self.cooldown_norm == 1.0 else 0.0
+        fire = 1.0 if abs(yaw_error) < 2.0 and abs(pitch_error) < 2.0 and self.cooldown_norm == 1.0 else -1.0
         return np.array([turret_dx, turret_dy, fire], dtype=np.float32)
 
     def step(self, action):
