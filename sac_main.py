@@ -61,8 +61,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     agent.replay_buffer.load()
     reset_flag = True
     reset_delay_flag = False
-    warmup_episodes = int(num_episodes * 0.03)
-    transition_episodes = int(num_episodes * 0.07)
+    warmup_episodes = int(num_episodes * 0.01)
+    transition_episodes = int(num_episodes * 0.02)
     for episode in range(num_episodes):
         next_state = None
         action = None

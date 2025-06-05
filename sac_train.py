@@ -368,7 +368,7 @@ class TankEnv:
         return np.array([turret_dx, turret_dy, fire], dtype=np.float32)
 
     def step(self, action):
-        _, _, fire = action
+        action_x, _, fire = action
         # Calculate reward
         reward = 0.0
         reward -= min(0.5 * np.log1p(self.current_time), 2.0)
@@ -376,13 +376,13 @@ class TankEnv:
         dz = self.enemy_z - self.tank_z
         distance = math.sqrt(dx**2 + dz**2)
         target_yaw = (math.degrees(math.atan2(dx, dz))) % 360.0
-        aim_error = abs(self.angle_diff(self.turret_x, target_yaw))
-        aim_score = min(0.9,1.0 - (aim_error / 180.0))
-        reward += (aim_score - 0.8) * 5.0
+        aim_error = self.angle_diff(self.turret_x, target_yaw)
+        aim_score = min(0.9,1.0 - (abs(aim_error) / 180.0))
+        reward += (aim_score - 0.8) * 10.0
         target_pitch = self.invert_pitch_from_impact_distance(distance)
         pitch_error = abs(target_pitch - self.turret_y)
         pitch_score = min(0.9, 1.0 - (pitch_error/15.0))
-        reward += (pitch_score - 0.8) * 3.0
+        reward += (pitch_score - 0.8) * 5.0
         if self.hit == 1.0:
             reward += 10.0
         elif self.hit_x and self.hit_z:
@@ -396,9 +396,15 @@ class TankEnv:
         if fire > 0.0:
             if self.cooldown_norm == 1.0:
                 self.fire_time = self.current_time
-                reward += 5.0 * aim_score  # 조준 정확도에 비례
+                reward += 1.0 * aim_score  # 조준 정확도에 비례
             else:
                 reward -= 3.0
+        if abs(aim_error) < 2:
+            if abs(action_x) > 0.1:
+                reward -= action_x * 5.0
+            else:
+                reward += (1 - action_x) * 3.0
+
         
         reward = np.clip(reward, -10.0, 10.0)
         done = (self.hit == 1.0) or (self.current_time > 60.0) or distance > 200.0
