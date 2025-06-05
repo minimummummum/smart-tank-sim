@@ -391,16 +391,14 @@ class TankEnv:
             hit_dz = abs(self.enemy_z - self.hit_z)
             hit_dist = (hit_dx ** 2 + hit_dy ** 2 + hit_dz ** 2) ** 0.5
             max_dist = 70.0
-            reward += 10 * (1.0 - hit_dist / max_dist)
+            reward += 3 * (1.0 - hit_dist / max_dist)
         distance = np.sqrt(dx**2 + dz**2)
-        if distance > 130.0:
-            reward -= 5.0
         if fire > 0.0:
             if self.cooldown_norm == 1.0:
                 self.fire_time = self.current_time
-                reward += 1.0 * aim_score  # 조준 정확도에 비례
+                reward += 5.0 * aim_score  # 조준 정확도에 비례
             else:
-                reward -= 2.0
+                reward -= 3.0
         
         reward = np.clip(reward, -10.0, 10.0)
         done = (self.hit == 1.0) or (self.current_time > 60.0) or distance > 200.0
