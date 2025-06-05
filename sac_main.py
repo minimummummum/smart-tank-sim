@@ -57,6 +57,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     num_episodes = 1000
     env = sac.TankEnv()
     agent = sac.SAC(state_dim=10, action_dim=3) # hit_dx,dz 임시로 뺌 pitch_error 넣음
+    agent.load()
+    agent.replay_buffer.load()
     reset_flag = True
     reset_delay_flag = False
     warmup_episodes = int(num_episodes * 0.03)

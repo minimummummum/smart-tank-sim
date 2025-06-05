@@ -39,7 +39,7 @@ class ReplayBuffer:
             pickle.dump(data, f)
         print(f"Saved replay buffer to {save_path}")
 
-    def load(self, path='sac_model_aiming/replay_buffer.pkl'):
+    def load(self, path='sac_model_aiming/replay_buffer_102.pkl'):
         if not os.path.exists(path):
             print(f"No replay buffer found at {path}")
             return False
@@ -103,12 +103,12 @@ class SAC:
         self.target_critic_1.load_state_dict(self.critic_1.state_dict())
         self.target_critic_2.load_state_dict(self.critic_2.state_dict())
 
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=3e-4) # 전이학습 시 1e-4 바꾸기
-        self.critic_1_optimizer = optim.Adam(self.critic_1.parameters(), lr=3e-4) # 전이학습 시 1e-4 바꾸기
-        self.critic_2_optimizer = optim.Adam(self.critic_2.parameters(), lr=3e-4) # 전이학습 시 1e-4 바꾸기
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=1e-4) # 전이학습 시 1e-4 바꾸기, 원래 3e-4로 함함
+        self.critic_1_optimizer = optim.Adam(self.critic_1.parameters(), lr=1e-4) # 전이학습 시 1e-4 바꾸기
+        self.critic_2_optimizer = optim.Adam(self.critic_2.parameters(), lr=1e-4) # 전이학습 시 1e-4 바꾸기
 
         self.log_alpha = torch.tensor(np.log(0.2), requires_grad=True, device=self.device)
-        self.alpha_optimizer = optim.Adam([self.log_alpha], lr=3e-4)
+        self.alpha_optimizer = optim.Adam([self.log_alpha], lr=1e-4)
         self.target_entropy = -action_dim
 
         self.replay_buffer = ReplayBuffer(capacity=1000000)
@@ -198,7 +198,7 @@ class SAC:
         }, save_path)
         print(f"Saved model to {save_path}")
 
-    def load(self, path='sac_model_aiming/sac_tank_continuous.pth'):
+    def load(self, path='sac_model_aiming/sac_tank_continuous_102.pth'):
         if os.path.exists(path):
             checkpoint = torch.load(path)
             self.actor.load_state_dict(checkpoint['actor'])
@@ -378,11 +378,11 @@ class TankEnv:
         target_yaw = (math.degrees(math.atan2(dx, dz))) % 360.0
         aim_error = abs(self.angle_diff(self.turret_x, target_yaw))
         aim_score = min(0.9,1.0 - (aim_error / 180.0))
-        reward += (aim_score - 0.5) * 3.0
+        reward += (aim_score - 0.8) * 5.0
         target_pitch = self.invert_pitch_from_impact_distance(distance)
         pitch_error = abs(target_pitch - self.turret_y)
         pitch_score = min(0.9, 1.0 - (pitch_error/15.0))
-        reward += (pitch_score - 0.5) * 2.0
+        reward += (pitch_score - 0.8) * 3.0
         if self.hit == 1.0:
             reward += 10.0
         elif self.hit_x and self.hit_z:
@@ -401,6 +401,7 @@ class TankEnv:
                 reward += 1.0 * aim_score  # 조준 정확도에 비례
             else:
                 reward -= 2.0
+        
         reward = np.clip(reward, -10.0, 10.0)
         done = (self.hit == 1.0) or (self.current_time > 60.0) or distance > 200.0
         print(f"보상: {reward:.2f}, 시간: {self.current_time:.2f}")
