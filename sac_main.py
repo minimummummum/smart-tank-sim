@@ -59,8 +59,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     agent = sac.SAC(state_dim=10, action_dim=3) # hit_dx,dz 임시로 뺌 pitch_error 넣음
     reset_flag = True
     reset_delay_flag = False
-    warmup_episodes = int(num_episodes * 0.01)
-    transition_episodes = int(num_episodes * 0.005)
+    warmup_episodes = int(num_episodes * 0.03)
+    transition_episodes = int(num_episodes * 0.07)
     for episode in range(num_episodes):
         next_state = None
         action = None
