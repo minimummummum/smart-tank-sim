@@ -5,7 +5,7 @@ from PIL import Image
 import numpy as np
 from io import BytesIO
 import logging
-import sac_train as sac
+import sac_train_moving as sac
 import queue
 from utils import clear_queue
 import time
@@ -14,13 +14,8 @@ import random
 import torch
 app = Flask(__name__)
 ############################
-# 1. Queue 늘리고 전역변수 없애기 (완료)
-# 2. reset wait 무한 대기 -> 생각해보니 시간 이런 제약말고 /init 오면 초기화 된 거니까 그거를 시점으로 (완료)
-# 3. 생각을 좀 해봐야함. 현재 step()에서 왜 포탑 각도 갱신을 하는지? 시뮬레이터 상태를 불러와야지 (완료)
-# 초기화 상태 전송, 그거에 대한 액션 반환, 액션 실행, 상태 전송, 액션 반환, 실행..
-# 초기화 -> 상태 모델 전송 -> 액션 선택 -> 시뮬레이터 액션 명령 -> 상태 모델 전송 -> 보상 처리
-# 4. 보상설정 제대로 하기 (완료)
-# 5. PPO -> DQN으로 변경
+# 1. 5채널 360*5 1800
+# 2. Max Distance 150, False일 경우 or 50 이상일 경우 50
 ############################
 
 # 큐 생성
@@ -54,15 +49,13 @@ def yolo_worker(yolo_input_q, yolo_output_q):
 # action 백그라운드 프로세스
 def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                   info_input_q, info_output_q, init_input_q, collision_input_q):
-    num_episodes = 4000
+    num_episodes = 1000
     env = sac.TankEnv()
-    agent = sac.SAC(state_dim=10, action_dim=3) # hit_dx,dz 임시로 뺌 pitch_error 넣음
+    agent = sac.SAC(state_dim=1805, action_dim=2) # hit_dx,dz 임시로 뺌 pitch_error 넣음
     #agent.load()
     #agent.replay_buffer.load()
     reset_flag = True
     reset_delay_flag = False
-    warmup_episodes = int(num_episodes * 0.01)
-    transition_episodes = int(num_episodes * 0.02)
     for episode in range(num_episodes):
         next_state = None
         action = None
@@ -73,6 +66,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         reset_count = 0
         total_reward = 0
         steps = 0
+        target = [random.randint(10, 290), random.randint(10, 290)]
         while True:
             if reset_flag:
                 try:
@@ -101,7 +95,6 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 print("로그 데이터 없음")
                 info_output_q.put({"status": "success", "control": ""})
                 continue
-
             if reset_delay_flag:
                 if log_data.get("time") < 60.0:
                     reset_delay_flag = False
@@ -160,8 +153,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 continue
             
             # 시뮬레이터 상태를 모델에 갱신
-            if env.update_state(log_data, hit_data):
-                hit_data = None
+            if env.update_state(log_data, target):
+                pass
             if action is not None:
                 reward, done = env.step(action)
                 next_state = env.get_state()
@@ -179,27 +172,15 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             if next_state is None:
                 state = env.get_state()
             steps += 1
-            if episode < warmup_episodes:
-                action = env.scripted_action()
-                print(f"Scripted Action 중입니다. (Step {steps}): {action}, {state}")
-            elif episode < warmup_episodes + transition_episodes:
-                p_scripted = np.exp(-5.0 * (episode - warmup_episodes) / transition_episodes)
-                if random.random() < p_scripted:
-                    action = env.scripted_action()
-                    print(f"Scripted Action 중입니다. (Step {steps}): {action}, {state}")
-                else:
-                    action = agent.select_action(state)
-                    print(f"SAC Selection Action 중입니다. (Step {steps}): {action}, {state}")
-            else:
-                action = agent.select_action(state)
-                print(f"SAC Selection Action 중입니다. (Step {steps}): {action}, {state}")
+            action = agent.select_action(state)
+            print(f"SAC Selection Action 중입니다. (Step {steps}): {action}, {state}")
             action = action.tolist()
             sim_action = {
-            "moveWS": {"command": "", "weight": 0.0},
-            "moveAD": {"command": "", "weight": 0.0},
-            "turretQE": {"command": "Q" if action[0] > 0 else "E", "weight": abs(action[0])},
-            "turretRF": {"command": "R" if action[1] > 0 else "F", "weight": abs(action[1])},
-            "fire": action[2] > 0.0
+            "moveWS": {"command": "W" if action[0] > 0 else "S", "weight": abs(action[0])},
+            "moveAD": {"command": "D" if action[1] > 0 else "A", "weight": abs(action[1])},
+            "turretQE": {"command": "", "weight": 0.0},
+            "turretRF": {"command": "", "weight": 0.0},
+            "fire": False
             }
             print("step", episode, " ", end="")
             action_output_q.put(sim_action)
@@ -324,17 +305,17 @@ def collision():
 @app.route('/init', methods=['GET'])
 def init():
     angle = random.uniform(0, 2 * math.pi)
-    radius = random.randint(40, 80)
+    radius = random.randint(30, 100)
     offset_x = math.cos(angle) * radius
     offset_z = math.sin(angle) * radius
     config = {
         "startMode": "start",  # Options: "start" or "pause"
-        "blStartX": 150,  #Blue Start Position 60
+        "blStartX": 150 + offset_x,  #Blue Start Position 60
         "blStartY": 10,
-        "blStartZ": 150, # 27.23
-        "rdStartX": 150 + offset_x, #Red Start Position
+        "blStartZ": 150 + offset_z, # 27.23
+        "rdStartX": 300, #Red Start Position
         "rdStartY": 10,
-        "rdStartZ": 150 + offset_z,
+        "rdStartZ": 300,
         "trackingMode": True,
         "detactMode": False,
         "logMode": True,
@@ -367,4 +348,4 @@ if __name__ == '__main__':
     yolo_proc.start()
     action_proc.start()
 
-    app.run(host='0.0.0.0', port=5001, threaded=True)
+    app.run(host='0.0.0.0', port=5002, threaded=True)
