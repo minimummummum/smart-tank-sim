@@ -132,9 +132,8 @@ def detect():
     if not image:
         return jsonify({"error": "No image received"}), 400
     pil_image = Image.open(BytesIO(image.read()))
-    np_image = np.array(pil_image)
     
-    yolo_input_queue.put(np_image) # YOLO 프로세스에 이미지 전달
+    yolo_input_queue.put(pil_image) # YOLO 프로세스에 이미지 전달
     try:
         detections = yolo_output_queue.get(timeout=1)  # 결과 기다림
     except queue.Empty:
