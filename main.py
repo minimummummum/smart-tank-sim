@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from multiprocessing import Process, Queue
 from ultralytics import YOLO
 from PIL import Image
@@ -8,27 +8,48 @@ import logging
 import queue
 from utils import clear_queue
 import time
+import math
+import google.generativeai as genai
+import core.path_Finder as pf 
+import core.aim as aim
+
 app = Flask(__name__)
+lidar_data = []
+obstacles = []
+player_pos = []
+player_lidar_angle_z = []
+tank_status_data = {
+    "x": 0,
+    "z": 0,
+    "yaw": 0,
+    "pitch": 0,
+    "impact_x": 0,
+    "impact_z": 0,
+    "real_impact_x": 0,
+    "real_impact_z": 0
+}
+obstacle_data = {}
+chat_history = []  # 채팅 기록 저장 리스트
 
-# 큐 생성
-yolo_input_queue = Queue()
-yolo_output_queue = Queue()
 
-action_input_queue = Queue()
-action_output_queue = Queue()
 
-detect_input_queue = Queue()
-init_input_queue = Queue()
-hit_input_queue = Queue()
-collision_input_queue = Queue()
+yolo_input_queue = Queue(maxsize=1)
+yolo_output_queue = Queue(maxsize=1)
+action_input_queue = Queue(maxsize=1)
+action_output_queue = Queue(maxsize=1)
+detect_input_queue = Queue(maxsize=1)
+init_input_queue = Queue(maxsize=1)
+hit_input_queue = Queue(maxsize=1)
+collision_input_queue = Queue(maxsize=1)
+info_input_queue = Queue(maxsize=1)
+info_output_queue = Queue(maxsize=1)
+obstacles_input_queue = Queue(maxsize=1)
+llm_input_queue = Queue(maxsize=1)
+target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
+# target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 
-info_input_queue = Queue()
-info_output_queue = Queue()
-
-target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
-# YOLO 모델 백그라운드 프로세스
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("ntest_1.pt").to("cuda")
+    model = YOLO("2500n.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
@@ -38,92 +59,139 @@ def yolo_worker(yolo_input_q, yolo_output_q):
         # YOLO 결과를 yolo_output_q에 넣어 /detect로 response
         yolo_output_q.put(detections)
 
-# action 백그라운드 프로세스
+
 def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
-                  info_input_q, info_output_q, init_input_q, collision_input_q):
+                  info_input_q, info_output_q, init_input_q, collision_input_q, obstacles_input_q, llm_input_q):
     hit_data = None
     detections = None
     init_data = None
     collision_data = None
-    # Tracking 모드(현재 주석처리)와 log 모드가 켜져 있을 때만 동작 -> 원하지 않을 시 get_nowait 이용
-    # 혹은 my_queue.get(timeout=0.5)처럼 timeout을 설정하여
-    # 일정 시간 동안 대기 후 다음 반복문으로 넘어가게 할 수 있음.
+    astar = pf.Path()
+    aim_bot = aim.Aim()
+    target_point = None
+    actions = None
+    speed_flag = False
+    fire_flag = False
     while True:
-        # init_input_q에서 초기화 데이터가 들어오면 처리
         try:
             init_data = init_input_q.get_nowait()
             print("init 데이터 수신됨:", init_data)
         except queue.Empty:
             init_data = None
         if init_data:
-            # queue에 있는 모든 데이터를 비우고 초기화
             clear_queue(action_input_queue, action_output_queue,
                         hit_input_queue, detect_input_queue,
                         info_input_queue, info_output_queue,
-                        init_input_queue, collision_input_queue)
+                        init_input_queue, collision_input_queue, obstacles_input_queue, llm_input_queue)
             info_output_q.put({"status": "success", "control": ""})
             continue
-            # logic 구현
 
-        # Tracking 모드가 켜져 있을 때 /get_action에서 action_input_q로 True 전달
-        # if action_input_q.get() is not True: # 들어온 게 True가 아닐 경우 다음 반복문으로 넘어감
-            # continue
-        # Log 모드가 켜져 있을 때 /info에서 info_input_q로 로그 데이터 전달
         log_data = info_input_q.get()
         if not log_data:
             print("로그 데이터 없음")
-            # info에서 request 후 response 대기 중
-            # 빈 response 보내고 다음 반복으로 넘어감
             info_output_q.put({"status": "success", "control": ""})
             continue
 
-        # /detect에서 감지된 객체가 detect_input_q로 전달됨
-        try: 
-            detections = detect_input_q.get_nowait()
-        # detect 모드가 꺼져있거나 감지된 객체가 없을 때
-        except queue.Empty:
-            detections = None
-        # 감지된 객체가 있을 때
-        if detections:
-            print("객체 감지")
-            pass
-            # logic 구현
-
-        # /hit에서 포탄 충돌 정보가 hit_input_q로 전달됨
-        try: 
+        try:
             hit_data = hit_input_q.get_nowait()
             print("포탄 충돌 정보 수신됨")
-        # 충돌 정보가 없을 때
         except queue.Empty:
             hit_data = None
         if hit_data:
             print(f"포탄 충돌 정보: {hit_data}")
             pass
-            # logic 구현
-        
-        # /collision에서 충돌 정보가 collision_input_q로 전달됨
+
         try:
             collision_data = collision_input_q.get_nowait()
             print("충돌 정보 수신됨:", collision_data)
-        # 충돌 정보가 없을 때    
         except queue.Empty:
             collision_data = None
         if collision_data:
             print(f"충돌 정보: {collision_data}")
             pass
-            # logic 구현
+
+        try:
+            obstacles_data = obstacles_input_q.get_nowait()
+            print("장애물 정보 수신됨:", obstacles_data)
+        except queue.Empty:
+            obstacles_data = None
+        if obstacles_data:
+            astar.update_obstacle(obstacles_data)
+
+        try:
+            action_request = action_input_q.get_nowait()
+        except queue.Empty:
+            action_request = None
+        if not action_request:
+            info_output_q.put({"status": "success", "control": ""})
+            continue
+
+        try:
+            llm_request = llm_input_q.get_nowait()
+        except queue.Empty:
+            llm_request = None
+        if not llm_request:
+            pass
         
-        # action 로직 예시
-        action = {
-            "moveWS": {"command": "W", "weight": 1.0},
-            "moveAD": {"command": "D", "weight": 1.0},
-            "turretQE": {"command": "", "weight": 0.0},
-            "turretRF": {"command": "", "weight": 0.0},
-            "fire": True
-        }
-        # /get_action에 response
+        if llm_request:
+            x, y = map(int, llm_request.strip("()").split(","))
+            llm_request = None
+            target_point = [x, y]
+            print(target_point)
+            speed_flag = False
+            fire_flag = False
+            clear_queue(detect_input_q)
+        if target_point:
+            actions = astar.get_action(log_data, target_point)
+        if actions is None:
+            continue
+
+
+        try:
+            detections = detect_input_q.get_nowait()
+        except queue.Empty:
+            detections = None
+        if detections:
+            for box in detections:
+                if int(box[5]) in [0, 3, 4] and box[4] > 0.8:
+                    print(detections)
+                    print("객체 감지")
+                    speed_flag = True
+                    clear_queue(detect_input_q)
+                    if int(box[5]) == 3:
+                        fire_flag = True
+                    
+        if speed_flag:
+            #if log_data.get("playerSpeed", 0.0) > 2:
+                #actions[0] = -0.85
+            actions[0] = -10.0 # 정지
+            actions[1] = 0
+        print(actions)
+        if actions[0] > 0:
+            movews = "W"
+        elif actions[0] > -0.9:
+            movews = "S"
+        else:
+            movews = "STOP"
+        
+        if fire_flag:
+            t_actions = aim_bot.get_action(log_data)
+        else:
+            t_actions = [0, 0, 0]
+        if t_actions:
+            action = {
+                "moveWS": {"command": movews, "weight": abs(actions[0])},
+                "moveAD": {"command": "A" if actions[1] > 0 else "D", "weight": abs(actions[1])},
+                "turretQE": {"command": "Q" if t_actions[0] > 0 else "E", "weight": abs(t_actions[0])},
+                "turretRF": {"command": "R" if t_actions[1] > 0 else "F", "weight": abs(t_actions[1])},
+                "fire": bool(t_actions[2])
+            }
+        else:
+            action = {
+                "moveWS": {"command": movews, "weight": abs(actions[0])},
+                "moveAD": {"command": "A" if actions[1] > 0 else "D", "weight": abs(actions[1])},
+            }
         action_output_q.put(action)
-        # 대기중인 /info에 빈 response로 동기화
         info_output_q.put({"status": "success", "control": ""})
 
 @app.route('/detect', methods=['POST'])
@@ -132,18 +200,16 @@ def detect():
     if not image:
         return jsonify({"error": "No image received"}), 400
     pil_image = Image.open(BytesIO(image.read()))
-    
-    yolo_input_queue.put(pil_image) # YOLO 프로세스에 이미지 전달
+    yolo_input_queue.put(pil_image)
     try:
-        detections = yolo_output_queue.get(timeout=1)  # 결과 기다림
+        detections = yolo_output_queue.get(timeout=1)
     except queue.Empty:
         return jsonify({})
-    # 객체 결과를 detect_input_queue로 전달
     detect_input_queue.put(detections)
     filtered_results = []
     for box in detections:
         class_id = int(box[5])
-        if class_id in target_classes:
+        if class_id in target_classes and box[4] > 0.5:
             filtered_results.append({
                 'className': target_classes[class_id],
                 'bbox': [float(coord) for coord in box[:4]],
@@ -152,8 +218,28 @@ def detect():
                 'filled': False,
                 'updateBoxWhileMoving': False
             })
-
     return jsonify(filtered_results)
+
+@app.route('/tank_status', methods=['GET'])
+def tank_status():
+    return jsonify(tank_status_data)
+
+def calculate_impact_point_on_ground(x, z, yaw_deg, pitch_deg, gravity=9.81):
+    initial_speed = 60
+    yaw = math.radians(yaw_deg)
+    pitch = math.radians(pitch_deg)
+    dx = math.cos(pitch) * math.sin(yaw)
+    dy = math.sin(pitch)
+    dz = math.cos(pitch) * math.cos(yaw)
+    v0x = initial_speed * dx
+    v0y = initial_speed * dy
+    v0z = initial_speed * dz
+    if v0y <= 0:
+        return (x, 0, z)
+    t_impact = 2 * v0y / gravity
+    impact_x = x + v0x * t_impact
+    impact_z = z + v0z * t_impact
+    return (impact_x, impact_z)
 
 @app.route('/info', methods=['POST'])
 def info():
@@ -161,15 +247,34 @@ def info():
     if not data:
         return jsonify({"error": "No JSON received"}), 400
     info_input_queue.put(data)
-    #print("📨 /info data received:", data)
-    # Auto-reset after 15 seconds
-    # if data.get("time", 0) > 5:
-    #     return jsonify({"status": "success", "control": "reset"}) # "control": "pause"
-    
-    # 만약 get으로 대기 안 하고 빈 값을 return할 경우
-    # info_input_queue에 put으로 data 쌓일 수 있음.
-    # 그래서 get으로 대기하고,
-    # info_output_queue에 빈 response를 넣어 /get_action에서 대기 중인 프로세스와 동기화
+    x = data.get("playerPos", {}).get("x")
+    y = data.get("playerPos", {}).get("y")
+    z = data.get("playerPos", {}).get("z")
+    yaw = data.get("playerTurretX")
+    pitch = data.get("playerTurretY")
+    impact_data = calculate_impact_point_on_ground(x, z, yaw, pitch)
+    tank_status_data.update({
+        "x": x,
+        "z": z,
+        "yaw": yaw,
+        "pitch": pitch,
+        "impact_x": impact_data[0],
+        "impact_z": impact_data[1]
+    })
+    global player_lidar_angle_z, lidar_data, player_pos
+    player_lidar_angle_z = {'z': data.get("lidarRotation", [])['y']}
+    lidar_data_raw = data.get("lidarPoints", [])
+    player_pos = {'x': data.get("playerPos", [])['x'], 'z': data.get("playerPos", [])['z']}
+    lidar_data = []
+    for point in lidar_data_raw:
+        if point.get('channelIndex') == 2:
+            angle = point.get('angle')
+            pos = point.get('position', {})
+            lidar_data.append({
+                'angle': angle,
+                'x': pos.get('x'),
+                'z': pos.get('z')
+            })
     try:
         response = info_output_queue.get(timeout=1)
     except queue.Empty:
@@ -178,9 +283,7 @@ def info():
 
 @app.route('/get_action', methods=['POST'])
 def get_action():
-    # True를 넣어 action_worker가 동작하도록 함
     action_input_queue.put(True)
-    # action_output_queue에서 action을 기다림
     try:
         action = action_output_queue.get(timeout=1)
     except queue.Empty:
@@ -192,17 +295,27 @@ def update_bullet():
     data = request.get_json()
     if not data:
         return jsonify({"status": "ERROR", "message": "Invalid request data"}), 400
-    # 포탄 충돌 정보가 hit_input_queue로 전달됨
     hit_input_queue.put(data)
-    # print(f"💥 Bullet Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}")
+    tank_status_data.update({
+        "real_impact_x": data.get('x'),
+        "real_impact_z": data.get('z')
+    })
+    time.sleep(1)
+    tank_status_data.update({
+        "real_impact_x": 0,
+        "real_impact_z": 0
+    })
     return jsonify({"status": "OK", "message": "Bullet impact data received"})
+
+@app.route('/minimap')
+def minimap():
+    return render_template("index.html")
 
 @app.route('/set_destination', methods=['POST'])
 def set_destination():
     data = request.get_json()
     if not data or "destination" not in data:
         return jsonify({"status": "ERROR", "message": "Missing destination data"}), 400
-
     try:
         x, y, z = map(float, data["destination"].split(","))
         print(f"🎯 Destination set to: x={x}, y={y}, z={z}")
@@ -210,47 +323,44 @@ def set_destination():
     except Exception as e:
         return jsonify({"status": "ERROR", "message": f"Invalid format: {str(e)}"}), 400
 
+@app.route('/obstacles')
+def get_obstacles():
+    return jsonify(obstacle_data)
+
 @app.route('/update_obstacle', methods=['POST'])
 def update_obstacle():
     data = request.get_json()
-    if not data:
+    if not data.get("obstacles"):
         return jsonify({'status': 'error', 'message': 'No data received'}), 400
-
+    obstacles_input_queue.put(data)
     print("🪨 Obstacle Data:", data)
     return jsonify({'status': 'success', 'message': 'Obstacle data received'})
 
-@app.route('/collision', methods=['POST']) 
+@app.route('/collision', methods=['POST'])
 def collision():
     data = request.get_json()
     if not data:
         return jsonify({'status': 'error', 'message': 'No collision data received'}), 400
-    # 충돌 정보가 collision_input_queue로 전달됨
     collision_input_queue.put(data)
-
     object_name = data.get('objectName')
     position = data.get('position', {})
     x = position.get('x')
     y = position.get('y')
     z = position.get('z')
-
-    # print(f"💥 Collision Detected - Object: {object_name}, Position: ({x}, {y}, {z})")
-
     return jsonify({'status': 'success', 'message': 'Collision data received'})
 
 @app.route('/init', methods=['GET'])
 def init():
-    #x = np.random.randint(0, 300)
-    #z = np.random.randint(0, 300)
     config = {
-        "startMode": "start",  # Options: "start" or "pause"
-        "blStartX": 60,  #Blue Start Position 60
+        "startMode": "start",
+        "blStartX": 80,
         "blStartY": 10,
-        "blStartZ": 27.23, # 27.23
-        "rdStartX": 59, #Red Start Position
+        "blStartZ": 32.23,
+        "rdStartX": 180,
         "rdStartY": 10,
-        "rdStartZ": 280,
-        "trackingMode": False,
-        "detactMode": True,
+        "rdStartZ": 60,
+        "trackingMode": True,
+        "detactMode": False,
         "logMode": True,
         "enemyTracking": False,
         "saveSnapshot": False,
@@ -259,7 +369,6 @@ def init():
         "lux": 30000
     }
     print("🛠️ Initialization config sent via /init:", config)
-    # True를 넣어 reset 되었다고 action_worker가 인식하도록 함
     init_input_queue.put(True)
     return jsonify(config)
 
@@ -268,18 +377,50 @@ def start():
     print("🚀 /start command received")
     return jsonify({"control": ""})
 
-# 밑에 로그 안 뜨게게
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.WARNING)
+@app.route('/data')
+def data():
+    return jsonify({
+        'obstacles': obstacles,
+        'lidar': lidar_data,
+        'playerPos': player_pos,
+        'playerLidarAngleZ': player_lidar_angle_z
+    })
+
+# Gemini API 키 설정 (실제 키로 교체 필요)
+GOOGLE_API_KEY = "AIzaSyAjrWVzUEwwIgXlDKUnCdMxm4DVbs5g_RM"  # 여기에 Gemini API 키 입력
+genai.configure(api_key=GOOGLE_API_KEY)
+model = genai.GenerativeModel('gemini-2.5-flash')
+chat = model.start_chat(history=[])
+@app.route('/chat', methods=['POST'])
+def receive_chat():
+    if request.method == 'POST':
+        data = request.get_json()
+        if not data or 'user_message' not in data:
+            return jsonify({"status": "error", "message": "Invalid data format"}), 400
+        user_message = data['user_message']
+        try:
+            response = chat.send_message(user_message)
+            bot_response = response.text
+        except Exception as e:
+            bot_response = f"Gemini API 오류: {str(e)}"
+        print(f"Flask 서버에서 받은 메시지 - 사용자: {user_message}, 봇: {bot_response}")
+        llm_input_queue.put(bot_response)
+        chat_history.append(("User", user_message))
+        chat_history.append(("Bot", bot_response))
+        return jsonify({"status": "success", "response": bot_response}), 200
+    return jsonify({"status": "error", "message": "Method not allowed"}), 405
+
+@app.route('/chat_history', methods=['GET'])
+def get_chat_history():
+    return jsonify(chat_history)
 
 if __name__ == '__main__':
-    # 백그라운드 프로세스 시작
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)  # 불필요한 로그 감소
     yolo_proc = Process(target=yolo_worker, args=(yolo_input_queue, yolo_output_queue))
     action_proc = Process(target=action_worker, args=(action_input_queue, action_output_queue,
                                                       hit_input_queue, detect_input_queue,
                                                       info_input_queue, info_output_queue,
-                                                      init_input_queue, collision_input_queue))
+                                                      init_input_queue, collision_input_queue, obstacles_input_queue, llm_input_queue))
     yolo_proc.start()
     action_proc.start()
-
-    app.run(host='0.0.0.0', port=5000, threaded=True)
+    app.run(host='0.0.0.0', port=5026, threaded=True, debug=False)
