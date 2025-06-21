@@ -15,11 +15,12 @@ class Path:
         self.grid_size = 5
         self.grid = np.zeros((self.map_size, self.map_size), dtype=int)
         self.path = []
+        self.path_tmp = []
         self.current_path_index = -1
         self.SAFETY_MARGIN = 1
         self.time =0
         self.last_calculated_target = None
-        self.MIN_NEXT_POINT_DISTANCE = 10
+        self.MIN_NEXT_POINT_DISTANCE = 5
         self.path_check = True
 
     def update_obstacle(self, obstacle_data):
@@ -69,16 +70,9 @@ class Path:
         
         # print(f"Obstacle count (with safety margin): {np.sum(self.grid)}")
     
-
-    '''
-    이건 사용 안하고 있습니다.
-    '''
-    def angle_diff(self,angle):
-        """각도를 -180도 ~ 180도 범위로 정규화"""
-        angle = math.fmod(angle + 180, 360)
-        if angle < 0:
-            angle += 360
-        return angle - 180
+    def angle_diff(self, a, b):
+        """두 각도 사이의 최소 차이 (0~180도)"""
+        return (a - b + 180) % 360 - 180
 
     '''
     목표가 앵글 0이라는 기준으로 잡고 BODY X의 앵들을 구하는 용도
@@ -123,11 +117,10 @@ class Path:
             self.body_x = int(round(log_data.get("playerBodyX", 0.0)))
             self.body_y = int(round(log_data.get("playerBodyY", 0.0)))
             self.body_z = int(round(log_data.get("playerBodyZ", 0.0)))
-            self.tank_yam = self.angle_diff(self.body_x)
             self.tank_speed = np.clip(int(round(log_data.get("playerSpeed", 0.0))), 0, 70)
-            distance = np.hypot(target_point[0] - self.tank_x, target_point[1] - self.tank_y)
-
-            if distance < 10:
+            distance = np.hypot(target_point[0] - self.tank_x, target_point[1] - self.tank_z)
+            print("거리: ", distance)
+            if distance < 5:
                 return [-10.0, 0.0]
             else:
                 '''1초 이상 지났다면 경로 초기화 
@@ -160,48 +153,57 @@ class Path:
         '''
         경로가 들어왔을 경우에만  실행하도록 합니다
         '''
-        if len(self.path) > 1:
-            
+        if len(self.path) < 2:
+            self.path = self.path_tmp
+        if len(self.path) > 1 or len(self.path_tmp) > 1:
+            self.path_tmp = self.path
             dx = self.path[self.current_path_index]['x'] - self.tank_x
             dz = self.path[self.current_path_index]['z'] - self.tank_z
-            
-            # 현재 tank가 바라보고 있는 방향을 받아 옵니다.
-            current_angle = log_data.get('playerBodyX', 0)
-            
-            target_angle_rad = math.atan2(dx, dz)
-            target_angle = math.degrees(target_angle_rad)
-            
-            if target_angle < 0:
-                target_angle += 360
+            target_yaw = (math.degrees(math.atan2(dx, dz))) % 360.0
+            yaw_error = self.angle_diff(log_data.get('playerBodyX', 0), target_yaw)
+            if yaw_error > 50:
+                movead = 2.0
+            elif yaw_error < -50:
+                movead = -2.0
+            elif yaw_error > 30:
+                movead = 1
+            elif yaw_error < -30:
+                movead = -1 
+            elif yaw_error > 0:
+                movead = yaw_error * 0.03
+            elif yaw_error < 0:
+                movead = yaw_error * 0.03
+            else:
+                movead = 0.0
+            movews = 1.0 # * min(0.01, (180 - yaw_error))
+            print(f"tank: {log_data.get('playerBodyX', 0)}, target_yaw: {target_yaw}, yaw_error: {yaw_error}, movead: {movead}")
+            # # 상대 방향: 내가 보는 방향이 목표 기준에서 얼마나 벗어났는지
 
-            # 상대 방향: 내가 보는 방향이 목표 기준에서 얼마나 벗어났는지
-            toward_angle = self.normalize_angle_360(current_angle - target_angle)
+            # if 90 <= toward_angle <= 180:
+            #     movews = -10.0
+            #     movead = 1.7
+            # elif 40 <= toward_angle < 90:
+            #     movews = 0.1
+            #     movead = 1.2
+            # elif 20 <= toward_angle < 40:
+            #     movews = 0.3
+            #     movead = 0.9
+            # elif 0 <= toward_angle < 20:
+            #     movews = 1.0
+            #     movead = 0.5
 
-            if 90 <= toward_angle <= 180:
-                movews = -10.0
-                movead = 1.7
-            elif 40 <= toward_angle < 90:
-                movews = 0.1
-                movead = 1.2
-            elif 20 <= toward_angle < 40:
-                movews = 0.3
-                movead = 0.9
-            elif 0 <= toward_angle < 20:
-                movews = 1.0
-                movead = 0.5
-
-            elif 180 < toward_angle <= 270:
-                movews = -10.0
-                movead = -1.7
-            elif 270 < toward_angle <= 320:
-                movews = 0.1
-                movead = -1.2
-            elif 320 < toward_angle <= 340:
-                movews = 0.3
-                movead = -0.9
-            elif 340 < toward_angle <= 360:
-                movews = 1.0
-                movead = -0.5
+            # elif 180 < toward_angle <= 270:
+            #     movews = -10.0
+            #     movead = -1.7
+            # elif 270 < toward_angle <= 320:
+            #     movews = 0.1
+            #     movead = -1.2
+            # elif 320 < toward_angle <= 340:
+            #     movews = 0.3
+            #     movead = -0.9
+            # elif 340 < toward_angle <= 360:
+            #     movews = 1.0
+            #     movead = -0.5
 
             if log_data.get("playerSpeed", 0.0) > 7:
                 movews = -0.85
@@ -211,7 +213,6 @@ class Path:
             movews = -10.0
             movead = 0
             return [movews, movead]
-        
     def simplify_path(self, path, tolerance=5.0):
         """
         Ramer–Douglas–Peucker 기반 경로 단순화.
