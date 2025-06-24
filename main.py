@@ -45,11 +45,12 @@ info_input_queue = Queue(maxsize=1)
 info_output_queue = Queue(maxsize=1)
 obstacles_input_queue = Queue(maxsize=1)
 llm_input_queue = Queue(maxsize=1)
-target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
+target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
+# target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
 # target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("2500n.pt").to("cuda")
+    model = YOLO("yolov8x.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
