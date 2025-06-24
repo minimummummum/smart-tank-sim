@@ -13,6 +13,63 @@ import google.generativeai as genai
 import core.path_Finder as pf 
 import core.aim as aim
 
+# # flat map test -> 도착 지점 (80, 265)
+# CONFIG = {
+#         "startMode": "start",  # Options: "start" or "pause"
+#         "blStartX": 80,  #Blue Start Position
+#         "blStartY": 10,
+#         "blStartZ": 32,
+#         "rdStartX": 10, #Red Start Position (146, 36)
+#         "rdStartY": 0,
+#         "rdStartZ": 10,
+#         "trackingMode": True,
+#         "detactMode": True,
+#         "logMode" :True,
+#         "enemyTracking": False,
+#         "saveSnapshot": False,
+#         "saveLog": False,
+#         "saveLidarData": False,
+#         "lux": 30000
+#     }
+
+# # S1 map -> 도착 지점 (207, 56)
+# CONFIG = {
+#         "startMode": "start",  # Options: "start" or "pause"
+#         "blStartX": 20,  #Blue Start Position
+#         "blStartY": 10,
+#         "blStartZ": 280, 
+#         "rdStartX": 211, #Red Start Position (146, 36)
+#         "rdStartY": 10,
+#         "rdStartZ": 240,
+#         "trackingMode": True,
+#         "detactMode": True,
+#         "logMode" :True,
+#         "enemyTracking": False,
+#         "saveSnapshot": False,
+#         "saveLog": False,
+#         "saveLidarData": False,
+#         "lux": 30000
+#     }
+
+# S2 map -> 도착 지점 (20, 280)
+CONFIG = {
+        "startMode": "start",  # Options: "start" or "pause"
+        "blStartX": 207,  #Blue Start Position
+        "blStartY": 10,
+        "blStartZ": 56, 
+        "rdStartX": 211, #Red Start Position (146, 36)
+        "rdStartY": 10,
+        "rdStartZ": 240,
+        "trackingMode": True,
+        "detactMode": True,
+        "logMode" :True,
+        "enemyTracking": False,
+        "saveSnapshot": False,
+        "saveLog": False,
+        "saveLidarData": False,
+        "lux": 30000
+    }
+
 app = Flask(__name__)
 lidar_data = []
 obstacles = []
@@ -31,8 +88,6 @@ tank_status_data = {
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
 
-
-
 yolo_input_queue = Queue(maxsize=1)
 yolo_output_queue = Queue(maxsize=1)
 action_input_queue = Queue(maxsize=1)
@@ -45,11 +100,12 @@ info_input_queue = Queue(maxsize=1)
 info_output_queue = Queue(maxsize=1)
 obstacles_input_queue = Queue(maxsize=1)
 llm_input_queue = Queue(maxsize=1)
-target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
+# target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
+target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
 # target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("2500n.pt").to("cuda")
+    model = YOLO("xmodel_test.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
@@ -72,7 +128,9 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     actions = None
     speed_flag = False
     fire_flag = False
+    stop_flag= False
     while True:
+        tank_cnt = 0
         try:
             init_data = init_input_q.get_nowait()
             print("init 데이터 수신됨:", init_data)
@@ -84,6 +142,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                         info_input_queue, info_output_queue,
                         init_input_queue, collision_input_queue, obstacles_input_queue, llm_input_queue)
             info_output_q.put({"status": "success", "control": ""})
+            target_point=None
             continue
 
         log_data = info_input_q.get()
@@ -140,32 +199,43 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             print(target_point)
             speed_flag = False
             fire_flag = False
+            stop_flag = False
             clear_queue(detect_input_q)
         if target_point:
             actions = astar.get_action(log_data, target_point)
         if actions is None:
             continue
 
-
+        
         try:
             detections = detect_input_q.get_nowait()
         except queue.Empty:
             detections = None
         if detections:
+            # tank_cnt : 한 프레임에서 detect된 탱크 수
             for box in detections:
-                if int(box[5]) in [0, 3, 4] and box[4] > 0.8:
+                if int(box[5]) in [0, 1, 2] and box[4] > 0.80:
                     print(detections)
                     print("객체 감지")
                     speed_flag = True
                     clear_queue(detect_input_q)
-                    if int(box[5]) == 3:
-                        fire_flag = True
+                    if int(box[5]) == 0:
+                        tank_cnt+=1
+            if tank_cnt == 1:
+                # 탱크 한 대를 봤을 때, 주변에 탱크가 더 있는지 확인하고, 최종 탱크 수를 결정하여 보고하도록 하는 코드 필요
+                fire_flag=True
+            elif tank_cnt >= 2:
+                stop_flag = True
+                fire_flag = False
+        print("🚗:",tank_cnt)
                     
         if speed_flag:
-            #if log_data.get("playerSpeed", 0.0) > 2:
-                #actions[0] = -0.85
-            actions[0] = -10.0 # 정지
-            actions[1] = 0
+            if log_data.get("playerSpeed", 0.0) > 5:
+                actions[0] = -0.85
+            # actions[0] = -10.0 # 정지
+        if stop_flag:
+            actions[0] = -10.0
+            
         print(actions)
         if actions[0] > 0:
             movews = "W"
@@ -209,7 +279,7 @@ def detect():
     filtered_results = []
     for box in detections:
         class_id = int(box[5])
-        if class_id in target_classes and box[4] > 0.5:
+        if class_id in target_classes and box[4] > 0.80:
             filtered_results.append({
                 'className': target_classes[class_id],
                 'bbox': [float(coord) for coord in box[:4]],
@@ -351,23 +421,7 @@ def collision():
 
 @app.route('/init', methods=['GET'])
 def init():
-    config = {
-        "startMode": "start",
-        "blStartX": 80,
-        "blStartY": 10,
-        "blStartZ": 32.23,
-        "rdStartX": 180,
-        "rdStartY": 10,
-        "rdStartZ": 60,
-        "trackingMode": True,
-        "detactMode": False,
-        "logMode": True,
-        "enemyTracking": False,
-        "saveSnapshot": False,
-        "saveLog": False,
-        "saveLidarData": False,
-        "lux": 30000
-    }
+    config = CONFIG
     print("🛠️ Initialization config sent via /init:", config)
     init_input_queue.put(True)
     return jsonify(config)
@@ -423,4 +477,4 @@ if __name__ == '__main__':
                                                       init_input_queue, collision_input_queue, obstacles_input_queue, llm_input_queue))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5030, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5033, threaded=True, debug=False)
