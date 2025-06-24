@@ -87,6 +87,7 @@ tank_status_data = {
 }
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
+CHANNEL_INDEX = 6
 
 yolo_input_queue = Queue(maxsize=1)
 yolo_output_queue = Queue(maxsize=1)
@@ -337,7 +338,7 @@ def info():
     player_pos = {'x': data.get("playerPos", [])['x'], 'z': data.get("playerPos", [])['z']}
     lidar_data = []
     for point in lidar_data_raw:
-        if point.get('channelIndex') == 2:
+        if point.get('channelIndex') == CHANNEL_INDEX:
             angle = point.get('angle')
             pos = point.get('position', {})
             lidar_data.append({

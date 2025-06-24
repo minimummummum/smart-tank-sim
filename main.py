@@ -268,7 +268,7 @@ def info():
     player_pos = {'x': data.get("playerPos", [])['x'], 'z': data.get("playerPos", [])['z']}
     lidar_data = []
     for point in lidar_data_raw:
-        if point.get('channelIndex') == 2:
+        if point.get('channelIndex') == 6:
             angle = point.get('angle')
             pos = point.get('position', {})
             lidar_data.append({
