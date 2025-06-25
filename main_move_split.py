@@ -200,7 +200,6 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         except queue.Empty:
             llm_request = None
         if not llm_request:
-            stop_flag = True
             pass
         
         if llm_request:
