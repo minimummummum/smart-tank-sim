@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from multiprocessing import Process, Queue
 from ultralytics import YOLO
 from PIL import Image
-from collections import Counter
+from collections import Counter, deque
 import numpy as np
 from io import BytesIO
 import logging
@@ -88,7 +88,7 @@ tank_status_data = {
 }
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
-tank_cnt_list = []  # 적 탱크의 수를 확실히 하기 위한 리스트
+tank_cnt_list = deque(maxlen=3)  # 적 탱크의 수를 확실히 하기 위한 리스트
 
 yolo_input_queue = Queue(maxsize=1)
 yolo_output_queue = Queue(maxsize=1)
@@ -235,18 +235,12 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
 
             tank_cnt = counters[tank_id]
             tank_cnt_list.append(tank_cnt)
-            # tank_cnt_list의 길이는 3으로 유지 -> tank_cnt_list의 첫번째 요소 제거
-            if len(tank_cnt_list) > 3:
-                tank_cnt_list.pop(0)
             # 최종 탱크 수는 tank_cnt_list의 최댓값
             tank_cnt = max(tank_cnt_list)
             print("💙", tank_cnt_list)
-            # 만약 리스트 내에 0이 제일 많으면 최종 탱크 수는 0
-            if Counter(tank_cnt_list).most_common()[0][0]==0:
-                tank_cnt=0
-                # 리스트 내의 요소들의 갯수가 전부 1개로 같으면 최종 탱크 수는 최댓값
-                if Counter(tank_cnt_list).most_common()[0][1]==1:
-                    tank_cnt=max(tank_cnt_list)
+            # 리스트 내의 요소들의 갯수가 전부 1개로 같으면 최종 탱크 수는 최댓값
+            if Counter(tank_cnt_list).most_common()[0][1]==1:
+                tank_cnt=max(tank_cnt_list)
                     
         print("🚗", tank_cnt)
 
