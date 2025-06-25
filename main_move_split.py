@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from multiprocessing import Process, Queue
 from ultralytics import YOLO
 from PIL import Image
+from collections import Counter
 import numpy as np
 from io import BytesIO
 import logging
@@ -19,9 +20,9 @@ import core.aim as aim
 #         "blStartX": 80,  #Blue Start Position
 #         "blStartY": 10,
 #         "blStartZ": 32,
-#         "rdStartX": 10, #Red Start Position (146, 36)
-#         "rdStartY": 0,
-#         "rdStartZ": 10,
+#         "rdStartX": 144, #Red Start Position (146, 36)
+#         "rdStartY": 10,
+#         "rdStartZ": 34,
 #         "trackingMode": True,
 #         "detactMode": True,
 #         "logMode" :True,
@@ -38,9 +39,9 @@ import core.aim as aim
 #         "blStartX": 20,  #Blue Start Position
 #         "blStartY": 10,
 #         "blStartZ": 280, 
-#         "rdStartX": 211, #Red Start Position (146, 36)
+#         "rdStartX": 200, #Red Start Position 
 #         "rdStartY": 10,
-#         "rdStartZ": 240,
+#         "rdStartZ": 50,
 #         "trackingMode": True,
 #         "detactMode": True,
 #         "logMode" :True,
@@ -87,6 +88,7 @@ tank_status_data = {
 }
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
+tank_cnt_list = []  # 적 탱크의 수를 확실히 하기 위한 리스트
 
 yolo_input_queue = Queue(maxsize=1)
 yolo_output_queue = Queue(maxsize=1)
@@ -100,12 +102,15 @@ info_input_queue = Queue(maxsize=1)
 info_output_queue = Queue(maxsize=1)
 obstacles_input_queue = Queue(maxsize=1)
 llm_input_queue = Queue(maxsize=1)
-# target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
-target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
+
+target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}        # 2500n.pt
+# target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}      # xmodel_test.pt OR lmodel_test.pt
 # target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("xmodel_test.pt").to("cuda")
+    model = YOLO("2500n.pt").to("cuda")       # nano model test용
+    # model = YOLO("lmodel_test.pt").to("cuda")       # large model test용
+    # model = YOLO("xmodel_test.pt").to("cuda")       # xlarge model test용
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
@@ -129,8 +134,14 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     speed_flag = False
     fire_flag = False
     stop_flag= False
+    global tank_cnt_list
+
     while True:
         tank_cnt = 0
+        human_cnt = 0
+        car_cnt = 0
+
+        tank_num=0
         try:
             init_data = init_input_q.get_nowait()
             print("init 데이터 수신됨:", init_data)
@@ -190,6 +201,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         except queue.Empty:
             llm_request = None
         if not llm_request:
+            stop_flag = True
             pass
         
         if llm_request:
@@ -206,7 +218,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         if actions is None:
             continue
 
-        
+
         try:
             detections = detect_input_q.get_nowait()
         except queue.Empty:
@@ -214,20 +226,57 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         if detections:
             # tank_cnt : 한 프레임에서 detect된 탱크 수
             for box in detections:
-                if int(box[5]) in [0, 1, 2] and box[4] > 0.80:
-                    print(detections)
+                if int(box[5]) in [0, 3, 4] and box[4] > 0.80:
                     print("객체 감지")
                     speed_flag = True
                     clear_queue(detect_input_q)
-                    if int(box[5]) == 0:
-                        tank_cnt+=1
-            if tank_cnt == 1:
-                # 탱크 한 대를 봤을 때, 주변에 탱크가 더 있는지 확인하고, 최종 탱크 수를 결정하여 보고하도록 하는 코드 필요
-                fire_flag=True
-            elif tank_cnt >= 2:
-                stop_flag = True
-                fire_flag = False
-        print("🚗:",tank_cnt)
+                    
+                    # 각각의 객체 갯수 세기
+                    match int(box[5]):
+                        case 0:
+                            car_cnt+=1
+                        case 3:
+                            tank_cnt+=1
+                        case 4:
+                            human_cnt+=1
+            print("💙",tank_cnt)
+
+            tank_cnt_list.append(tank_cnt)
+
+            if len(tank_cnt_list) < 3:
+                print("💛", tank_cnt_list)
+                tank_num = 0
+            if len(tank_cnt_list) >= 3:
+                if len(tank_cnt_list) > 3:
+                    tank_cnt_list.pop(0)
+                # 최종 탱크 수는 tank_cnt_list의 최댓값
+                tank_num = max(tank_cnt_list)
+                # 만약 리스트 내에 0이 제일 많으면 최종 탱크 수는 0
+                if Counter(tank_cnt_list).most_common()[0][0]==0:
+                    tank_num=0
+                print("❤️", tank_cnt_list)
+                    
+        
+        print("🚗", tank_num)
+
+        # 탱크 0대 발견 시, 변화 없이 진행
+        if tank_num == 0:
+            speed_flag = False
+            stop_flag = False
+            fire_flag = False
+
+        # 탱크 한 대 발견 시, 감속 
+        elif tank_num == 1:
+            speed_flag = True
+            stop_flag = False
+            fire_flag = False
+
+        # 탱크 2대 이상 발견 시, 정지 
+        elif tank_num >= 2:
+            speed_flag = False
+            stop_flag = True
+            fire_flag = False
+        
                     
         if speed_flag:
             if log_data.get("playerSpeed", 0.0) > 5:
@@ -235,19 +284,21 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             # actions[0] = -10.0 # 정지
         if stop_flag:
             actions[0] = -10.0
-            
         print(actions)
+
         if actions[0] > 0:
             movews = "W"
         elif actions[0] > -0.9:
             movews = "S"
         else:
             movews = "STOP"
-        
+        # 조준 플래그 생성 
+        # 우회할 때 stop_flag=False, aim_flag=False, fire_flag=False, 
         if fire_flag:
             t_actions = aim_bot.get_action(log_data)
         else:
             t_actions = [0, 0, 0]
+
         if t_actions:
             action = {
                 "moveWS": {"command": movews, "weight": abs(actions[0])},
@@ -477,4 +528,4 @@ if __name__ == '__main__':
                                                       init_input_queue, collision_input_queue, obstacles_input_queue, llm_input_queue))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5033, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5001, threaded=True, debug=False)

@@ -423,4 +423,4 @@ if __name__ == '__main__':
                                                       init_input_queue, collision_input_queue, obstacles_input_queue, llm_input_queue))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5026, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5044, threaded=True, debug=False)
