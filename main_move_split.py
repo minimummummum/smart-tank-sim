@@ -106,11 +106,13 @@ llm_input_queue = Queue(maxsize=1)
 target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}        # 2500n.pt
 # target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}      # xmodel_test.pt OR lmodel_test.pt
 # target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
+tank_id = next(key for key, value in target_classes.items() if value == "E_Tank")
 
 def yolo_worker(yolo_input_q, yolo_output_q):
     model = YOLO("2500n.pt").to("cuda")       # nano model test용
     # model = YOLO("lmodel_test.pt").to("cuda")       # large model test용
     # model = YOLO("xmodel_test.pt").to("cuda")       # xlarge model test용
+
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
@@ -131,17 +133,14 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     aim_bot = aim.Aim()
     target_point = None
     actions = None
-    speed_flag = False
-    fire_flag = False
-    stop_flag= False
+    speed_flag = False      # 감속
+    fire_flag = False       # 발사
+    stop_flag= False        # 정지
     global tank_cnt_list
 
     while True:
-        tank_cnt = 0
-        human_cnt = 0
-        car_cnt = 0
-
-        tank_num=0
+        counters = {class_id: 0 for class_id in target_classes.keys()}
+        tank_cnt=0
         try:
             init_data = init_input_q.get_nowait()
             print("init 데이터 수신됨:", init_data)
@@ -226,62 +225,54 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         if detections:
             # tank_cnt : 한 프레임에서 detect된 탱크 수
             for box in detections:
-                if int(box[5]) in [0, 3, 4] and box[4] > 0.80:
+                class_id = int(box[5])
+                if class_id in target_classes.keys() and box[4] > 0.80:
                     print("객체 감지")
                     speed_flag = True
                     clear_queue(detect_input_q)
                     
-                    # 각각의 객체 갯수 세기
-                    match int(box[5]):
-                        case 0:
-                            car_cnt+=1
-                        case 3:
-                            tank_cnt+=1
-                        case 4:
-                            human_cnt+=1
-            print("💙",tank_cnt)
+                    # 각 객체의 갯수 세기
+                    counters[class_id] += 1
+            tank_cnt=counters[tank_id]
 
             tank_cnt_list.append(tank_cnt)
 
-            if len(tank_cnt_list) < 3:
-                print("💛", tank_cnt_list)
-                tank_num = 0
             if len(tank_cnt_list) >= 3:
+                # tank_cnt_list의 길이는 3으로 유지 -> tank_cnt_list의 첫번째 요소 제거
                 if len(tank_cnt_list) > 3:
                     tank_cnt_list.pop(0)
                 # 최종 탱크 수는 tank_cnt_list의 최댓값
-                tank_num = max(tank_cnt_list)
+                tank_cnt = max(tank_cnt_list)
                 # 만약 리스트 내에 0이 제일 많으면 최종 탱크 수는 0
                 if Counter(tank_cnt_list).most_common()[0][0]==0:
-                    tank_num=0
-                print("❤️", tank_cnt_list)
+                    tank_cnt=0
                     
-        
-        print("🚗", tank_num)
+        print("🚗", tank_cnt)
 
         # 탱크 0대 발견 시, 변화 없이 진행
-        if tank_num == 0:
+        if tank_cnt == 0:
             speed_flag = False
             stop_flag = False
             fire_flag = False
 
         # 탱크 한 대 발견 시, 감속 
-        elif tank_num == 1:
+        elif tank_cnt == 1:
             speed_flag = True
             stop_flag = False
             fire_flag = False
 
         # 탱크 2대 이상 발견 시, 정지 
-        elif tank_num >= 2:
+        elif tank_cnt >= 2:
             speed_flag = False
             stop_flag = True
             fire_flag = False
         
-                    
+    # moveWS, moveAD 조절 
         if speed_flag:
             if log_data.get("playerSpeed", 0.0) > 5:
                 actions[0] = -0.85
             # actions[0] = -10.0 # 정지
+
         if stop_flag:
             actions[0] = -10.0
         print(actions)
@@ -292,13 +283,14 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             movews = "S"
         else:
             movews = "STOP"
-        # 조준 플래그 생성 
-        # 우회할 때 stop_flag=False, aim_flag=False, fire_flag=False, 
+
+    # turretQE, turretRF 조절
         if fire_flag:
             t_actions = aim_bot.get_action(log_data)
         else:
             t_actions = [0, 0, 0]
 
+    # 최종 action 결정
         if t_actions:
             action = {
                 "moveWS": {"command": movews, "weight": abs(actions[0])},
