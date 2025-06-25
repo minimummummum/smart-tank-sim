@@ -19,12 +19,12 @@ class Aim():
         self.turret_x = log_data.get("playerTurretX")
         self.turret_y = log_data.get("playerTurretY")
         return self._get_aim_action()    
-    def return_aim_action(self, log_data):
+    def align_turret_with_body(self, log_data):
         # 포탑 각도
         self.turret_x = log_data.get("playerTurretX")
         # 몸체 각도
         self.body_x= log_data.get("playerBodyX")
-        return self._return_aim_action()
+        return self._align_turret_with_body()
     def angle_diff(self, a, b):
         """두 각도 사이의 최소 차이 (0~180도)"""
         return (a - b + 180) % 360 - 180
@@ -136,7 +136,7 @@ class Aim():
         else:
             return None
         
-    def _return_aim_action(self):
+    def _align_turret_with_body(self):
         """포탑 각을 몸체 각과 일치하게 맞춤"""
         # 최단 경로로 정규화 (-180° ~ 180°)
         delta = ((self.turret_x - self.body_x + 180) % 360) - 180

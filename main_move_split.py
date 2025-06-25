@@ -308,7 +308,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         if aim_flag:
             t_actions = aim_bot.get_aim_action(log_data)
         elif not aim_flag:
-            t_actions = [aim_bot.return_aim_action(log_data),0]
+            t_actions = [aim_bot.align_turret_with_body(log_data),0]
         elif not aim_flag and -5<=angle_diff<=5:
             t_actions = [0,0]
 
