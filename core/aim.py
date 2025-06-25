@@ -7,7 +7,7 @@ class Aim():
         pass
     def reset(self):
         pass
-    def get_action(self, log_data):
+    def get_aim_action(self, log_data):
         self.tank_x = log_data.get("playerPos", {}).get("x")
         self.tank_y = log_data.get("playerPos", {}).get("y")
         self.tank_z = log_data.get("playerPos", {}).get("z")
@@ -18,7 +18,13 @@ class Aim():
         # 포탑 각도
         self.turret_x = log_data.get("playerTurretX")
         self.turret_y = log_data.get("playerTurretY")
-        return self._get_action()
+        return self._get_aim_action()    
+    def return_aim_action(self, log_data):
+        # 포탑 각도
+        self.turret_x = log_data.get("playerTurretX")
+        # 몸체 각도
+        self.body_x= log_data.get("playerBodyX")
+        return self._return_aim_action()
     def angle_diff(self, a, b):
         """두 각도 사이의 최소 차이 (0~180도)"""
         return (a - b + 180) % 360 - 180
@@ -85,7 +91,7 @@ class Aim():
                 return None
         
         return None
-    def _get_action(self):
+    def _get_aim_action(self):
         """스크립트된 행동: 포탑을 적 방향으로 조준하고 발사"""
         dx = self.enemy_x - self.tank_x
         dz = self.enemy_z - self.tank_z
@@ -124,9 +130,35 @@ class Aim():
             turret_dx *= 1 - distance/1500
             #turret_dy = 0.3  if pitch_error > 0 else (-0.3 if pitch_error < -0 else 0)
             print(yaw_error, pitch_error)
-            fire = 1 if abs(yaw_error) < 1 and abs(pitch_error) < 1 else 0
-            action = [turret_dx, turret_dy, fire]
+            action = [turret_dx, turret_dy]
 
             return action
         else:
             return None
+        
+    def _return_aim_action(self):
+        """포탑 각을 몸체 각과 일치하게 맞춤"""
+        # 최단 경로로 정규화 (-180° ~ 180°)
+        delta = ((self.turret_x - self.body_x + 180) % 360) - 180
+        if 90 <= delta <= 180:
+            turret_dx = 1.7
+        elif 40 <= delta < 90:
+            turret_dx = 1.2
+        elif 20 <= delta < 40:
+            turret_dx = 0.9
+        elif 5 < delta < 20:
+            turret_dx = 0.5
+
+        elif -180 < delta <= -90:
+            turret_dx = -1.7
+        elif-90 < delta <= -40:
+            turret_dx = -1.2
+        elif -40 < delta <= -20:
+            turret_dx = -0.9
+        elif -20 < delta < -5:
+            turret_dx = -0.5
+
+        elif -5<= delta <=5:
+            return 0
+            
+        return turret_dx

@@ -58,9 +58,9 @@ CONFIG = {
         "blStartX": 207,  #Blue Start Position
         "blStartY": 10,
         "blStartZ": 56, 
-        "rdStartX": 211, #Red Start Position (146, 36)
+        "rdStartX": 216, #Red Start Position (216, 121)
         "rdStartY": 10,
-        "rdStartZ": 240,
+        "rdStartZ": 121,
         "trackingMode": True,
         "detactMode": True,
         "logMode" :True,
@@ -136,6 +136,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     speed_flag = False      # 감속
     fire_flag = False       # 발사
     stop_flag= False        # 정지
+    aim_flag=False          # 조준
     global tank_cnt_list
 
     while True:
@@ -160,6 +161,15 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             print("로그 데이터 없음")
             info_output_q.put({"status": "success", "control": ""})
             continue
+        else:
+        # detection 없고 터렛의 방향이 몸체 방향과 일치하면 터렛 aim 움직이지 않게 하기 위해서
+        # 현재 터렛 방향과 몸체 방향의 angle_diff 계산
+            # 포탑 각도
+            tur_x = log_data.get("playerTurretX")
+            # 몸체 각도
+            body_x= log_data.get("playerBodyX")
+            angle_diff = ((tur_x - body_x + 180) % 360) - 180
+
 
         try:
             hit_data = hit_input_q.get_nowait()
@@ -226,8 +236,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             for box in detections:
                 class_id = int(box[5])
                 if class_id in target_classes.keys() and box[4] > 0.80:
-                    print("객체 감지")
-                    speed_flag = True
+                    # print("객체 감지")
+                    speed_flag = True   # 탱크, 사람, 차 중 어떤 것이 탐지되어도 감속함
                     clear_queue(detect_input_q)
                     
                     # 각 객체의 갯수 세기
@@ -237,30 +247,45 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             tank_cnt_list.append(tank_cnt)
             # 최종 탱크 수는 tank_cnt_list의 최댓값
             tank_cnt = max(tank_cnt_list)
-            print("💙", tank_cnt_list)
-            # 리스트 내의 요소들의 갯수가 전부 1개로 같으면 최종 탱크 수는 최댓값
+            # 리스트 내의 요소들의 갯수가 전부 1개로 같으면 최종 탱크 수는 최댓값 
             if Counter(tank_cnt_list).most_common()[0][1]==1:
                 tank_cnt=max(tank_cnt_list)
-                    
-        print("🚗", tank_cnt)
 
-        # 탱크 0대 발견 시, 변화 없이 진행
-        if tank_cnt == 0:
-            speed_flag = False
-            stop_flag = False
-            fire_flag = False
+            # 탱크 0대 발견 시, 변화 없이 진행
+            if tank_cnt == 0:
+                speed_flag = False
+                stop_flag = False
+                fire_flag = False
+                aim_flag = False
+                icon="🟩"
+                status="계속해서 이동합니다."
 
-        # 탱크 한 대 발견 시, 감속 
-        elif tank_cnt == 1:
-            speed_flag = True
-            stop_flag = False
-            fire_flag = False
+            # 탱크 한 대 발견 시, 감속 
+            elif tank_cnt == 1:
+                speed_flag = True
+                stop_flag = False
+                fire_flag = False
+                aim_flag=True
+                icon="🟨"
+                status="감속합니다."
 
-        # 탱크 2대 이상 발견 시, 정지 
-        elif tank_cnt >= 2:
-            speed_flag = False
-            stop_flag = True
-            fire_flag = False
+            # 탱크 2대 이상 발견 시, 정지 
+            elif tank_cnt >= 2:
+                speed_flag = False
+                stop_flag = True
+                fire_flag = False
+                aim_flag=True
+                icon="🟥"
+                status="정지합니다."
+                
+            print(f"{icon} 탱크 {tank_cnt}대를 발견했습니다. {status}")
+
+        # detection된 객체가 없을 때
+        else:
+            aim_flag = False
+
+        print(aim_flag)
+
         
     # moveWS, moveAD 조절 
         if speed_flag:
@@ -280,10 +305,12 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             movews = "STOP"
 
     # turretQE, turretRF 조절
-        if fire_flag:
-            t_actions = aim_bot.get_action(log_data)
-        else:
-            t_actions = [0, 0, 0]
+        if aim_flag:
+            t_actions = aim_bot.get_aim_action(log_data)
+        elif not aim_flag:
+            t_actions = [aim_bot.return_aim_action(log_data),0]
+        elif not aim_flag and -5<=angle_diff<=5:
+            t_actions = [0,0]
 
     # 최종 action 결정
         if t_actions:
@@ -292,13 +319,14 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 "moveAD": {"command": "A" if actions[1] > 0 else "D", "weight": abs(actions[1])},
                 "turretQE": {"command": "Q" if t_actions[0] > 0 else "E", "weight": abs(t_actions[0])},
                 "turretRF": {"command": "R" if t_actions[1] > 0 else "F", "weight": abs(t_actions[1])},
-                "fire": bool(t_actions[2])
+                "fire": fire_flag
             }
         else:
             action = {
                 "moveWS": {"command": movews, "weight": abs(actions[0])},
                 "moveAD": {"command": "A" if actions[1] > 0 else "D", "weight": abs(actions[1])},
             }
+        print(action)
         action_output_q.put(action)
         info_output_q.put({"status": "success", "control": ""})
 
