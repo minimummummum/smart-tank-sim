@@ -107,6 +107,8 @@ target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}        # 2500n.pt
 # target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}      # xmodel_test.pt OR lmodel_test.pt
 # target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 tank_id = next(key for key, value in target_classes.items() if value == "E_Tank")
+car_id = next(key for key, value in target_classes.items() if value == "Car")
+human_id = next(key for key, value in target_classes.items() if value == "Human")
 
 def yolo_worker(yolo_input_q, yolo_output_q):
     model = YOLO("2500n.pt").to("cuda")       # nano model test용
@@ -213,7 +215,10 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             pass
         
         if llm_request:
+            # x, y : 이동 좌표(정찰 혹은 우회)
+            # fire_comm : tank를 향해 발사할 건지 여부 (웹 컨트롤 패널에서 결정 by USER)
             x, y = map(int, llm_request.strip("()").split(","))
+            # x, y, fire_comm = map(int, llm_request.strip("()").split(","))
             llm_request = None
             target_point = [x, y]
             print(target_point)
@@ -242,6 +247,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                     
                     # 각 객체의 갯수 세기
                     counters[class_id] += 1
+                    # counters= {0:0, 3:0, 4:0}     # tank_id=3, car_id=0, human_id=4
 
             tank_cnt = counters[tank_id]
             tank_cnt_list.append(tank_cnt)
@@ -260,16 +266,17 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 icon="🟩"
                 status="계속해서 이동합니다."
 
-            # 탱크 한 대 발견 시, 감속 
+            # 탱크 한 대 발견 시, 감속 + 발사 명령 시 발사
             elif tank_cnt == 1:
                 speed_flag = True
                 stop_flag = False
                 fire_flag = False
+                # fire_flag = fire_comm
                 aim_flag=True
                 icon="🟨"
                 status="감속합니다."
 
-            # 탱크 2대 이상 발견 시, 정지 
+            # 탱크 2대 이상 발견 시, 정지 + 발사 명령 시 발사 혹은 우회 명령 시 우회
             elif tank_cnt >= 2:
                 speed_flag = False
                 stop_flag = True
@@ -277,13 +284,14 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 aim_flag=True
                 icon="🟥"
                 status="정지합니다."
-                
-            print(f"{icon} 탱크 {tank_cnt}대를 발견했습니다. {status}")
 
         # detection된 객체가 없을 때
         else:
             aim_flag = False
+            icon="🟩"        
+            status=""
 
+        print(f"{icon} 탱크 {tank_cnt}대, 자동차 {counters[0]}대, 사람 {counters[4]}명을 발견했습니다. {status}")
         print(aim_flag)
 
         
@@ -307,10 +315,10 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     # turretQE, turretRF 조절
         if aim_flag:
             t_actions = aim_bot.get_aim_action(log_data)
-        elif not aim_flag:
-            t_actions = [aim_bot.align_turret_with_body(log_data),0]
-        elif not aim_flag and -5<=angle_diff<=5:
-            t_actions = [0,0]
+        else:
+            t_actions = [aim_bot.align_turret_with_body(log_data), 0]
+            if -5<=angle_diff<=5:
+                t_actions = None
 
     # 최종 action 결정
         if t_actions:
@@ -319,7 +327,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                 "moveAD": {"command": "A" if actions[1] > 0 else "D", "weight": abs(actions[1])},
                 "turretQE": {"command": "Q" if t_actions[0] > 0 else "E", "weight": abs(t_actions[0])},
                 "turretRF": {"command": "R" if t_actions[1] > 0 else "F", "weight": abs(t_actions[1])},
-                "fire": fire_flag
+                "fire": 0
+                # "fire": fire_comm if fire_comm else 0
             }
         else:
             action = {
