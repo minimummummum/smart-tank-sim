@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>LiDAR 시각화 (300x300)</title>
+  <style>
+    body {
+      margin: 0;
+      background: #f0f0f0;
+      font-family: sans-serif;
+    }
+    canvas {
+      background: white;
+      display: block;
+      margin: 20px auto;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h2 style="text-align: center;">🛰️ 실시간 LiDAR 시각화 (300x300 시뮬레이션 맵)</h2>
+  <canvas id="map" width="300" height="300"></canvas>
+
+  <script>
+    const canvas = document.getElementById('map');
+    const ctx = canvas.getContext('2d');
+
+    function worldToCanvas(x, z, center) {
+      const scale = canvas.width / 100;
+      const relX = x - (center.x - 50);
+      const relZ = z - (center.z - 50);
+      return {
+        x: relX * scale,
+        y: canvas.height - relZ * scale
+      };
+    }
+
+    function drawFan(playerpos, playerLidarAngleZ) {
+      const degToRad = Math.PI / 180;
+      const canvasCenter = worldToCanvas(playerpos.x, playerpos.z, playerpos);
+      const radius = 150;
+      const centerAngleDeg = playerLidarAngleZ.z;
+      const spreadDeg = 24.5;
+
+      const startAngle = (centerAngleDeg - spreadDeg) * degToRad;
+      const endAngle = (centerAngleDeg + spreadDeg) * degToRad;
+      const adjust = -Math.PI / 2;
+
+      ctx.beginPath();
+      ctx.moveTo(canvasCenter.x, canvasCenter.y);
+      ctx.arc(
+        canvasCenter.x,
+        canvasCenter.y,
+        radius,
+        startAngle + adjust,
+        endAngle + adjust,
+        false
+      );
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+      ctx.fill();
+    }
+
+    function isPointInFan(point, playerpos, angleDeg, spreadDeg) {
+      const dx = point.x - playerpos.x;
+      const dz = point.z - playerpos.z;
+      const distance = Math.sqrt(dx * dx + dz * dz);
+      if (distance === 0) return true;
+
+      const degToRad = Math.PI / 180;
+      const centerRad = angleDeg * degToRad - Math.PI / 2;  // ⚠️ 보정 추가
+      const pointRad = Math.atan2(-dz, dx);
+
+      let diff = pointRad - centerRad;
+      while (diff > Math.PI) diff -= 2 * Math.PI;
+      while (diff < -Math.PI) diff += 2 * Math.PI;
+
+      return Math.abs(diff) <= spreadDeg * degToRad;
+    }
+
+    function drawMap(obstacles, lidar, playerpos, playerLidarAngleZ) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 장애물
+      ctx.strokeStyle = 'red';
+      ctx.lineWidth = 1;
+      ctx.font = '10px sans-serif';
+      obstacles.forEach(obs => {
+        const topLeft = worldToCanvas(obs.x_min, obs.z_max, playerpos);
+        const bottomRight = worldToCanvas(obs.x_max, obs.z_min, playerpos);
+        const w = bottomRight.x - topLeft.x;
+        const h = bottomRight.y - topLeft.y;
+        ctx.strokeRect(topLeft.x, topLeft.y, w, h);
+        ctx.fillStyle = 'red';
+        ctx.fillText(obs.id || '', topLeft.x + 2, topLeft.y - 2);
+      });
+
+      // LiDAR 포인트 (부채꼴 안은 blue, 바깥은 흐리게)
+      ctx.font = '9px sans-serif';
+      lidar.forEach(p => {
+        const inFan = isPointInFan(p, playerpos, playerLidarAngleZ.z, 24.5);
+        const canvasPt = worldToCanvas(p.x, p.z, playerpos);
+        ctx.beginPath();
+        ctx.arc(canvasPt.x, canvasPt.y, 2, 0, 2 * Math.PI);
+        ctx.fillStyle = inFan ? 'blue' : 'rgba(100,100,100,0.1)';
+        ctx.fill();
+      });
+
+      // 플레이어 위치
+      const meCanvas = worldToCanvas(playerpos.x, playerpos.z, playerpos);
+      ctx.fillStyle = 'green';
+      ctx.beginPath();
+      ctx.arc(meCanvas.x, meCanvas.y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.fillText('Me', meCanvas.x + 5, meCanvas.y - 2);
+
+      // 부채꼴
+      drawFan(playerpos, playerLidarAngleZ);
+    }
+
+    async function fetchDataAndRender() {
+      try {
+        const res = await fetch('/data');
+        const data = await res.json();
+        drawMap(data.obstacles, data.lidar, data.playerPos, data.playerLidarAngleZ);
+      } catch (err) {
+        console.error('데이터 가져오기 실패:', err);
+      }
+    }
+
+    fetchDataAndRender();
+    setInterval(fetchDataAndRender, 1000);
+  </script>
+</body>
+</html>

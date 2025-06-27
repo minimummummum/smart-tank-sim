@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Control Map & Gemini Chatbot</title>
+    <style>
+        body {
+            margin: 0;
+            background: #252101;
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 20px;
+            gap: 30px;
+        }
+        .control-panel-container, .chatbot-container {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        .control-panel-container {
+            flex: 1;
+            max-width: 400px;
+        }
+        .chatbot-container {
+            flex: 1;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            height: 700px;
+        }
+        canvas {
+            background: white;
+            display: block;
+            margin: 10px auto;
+            border: 1px solid #ccc;
+        }
+        #map {
+            width: 300px;
+            height: 300px;
+            background-color: #eee;
+            position: relative;
+            border: 1px solid #333;
+            display: block;
+            margin: 10px auto;
+        }
+        #tank {
+            width: 12px;
+            height: 12px;
+            background-color: blue;
+            position: absolute;
+            border-radius: 50%;
+            transform-origin: center;
+        }
+        #impact {
+            width: 24px;
+            height: 24px;
+            background-color: black;
+            position: absolute;
+            border-radius: 50%;
+            display: none;
+        }
+        #realimpact {
+            width: 24px;
+            height: 24px;
+            background-color: red;
+            position: absolute;
+            border-radius: 50%;
+            display: none;
+        }
+        .center-text {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .button-container {
+            text-align: center;
+            margin-top: 15px;
+            margin-bottom: 20px;
+        }
+        .action-button {
+            padding: 8px 15px;
+            margin: 0 5px;
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #04341b;
+            color: white;
+            transition: background-color 0.3s ease;
+        }
+        .action-button:hover {
+            background-color: #24fa36;
+        }
+        .chat-header {
+            background-color: #4a90e2;
+            color: white;
+            padding: 15px 20px;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-align: center;
+            margin: -20px -20px 20px -20px;
+            border-bottom: 1px solid #3a7bd5;
+        }
+        #chatMessages {
+            flex-grow: 1;
+            padding: 10px;
+            overflow-y: auto;
+            background-color: #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+        }
+        .chat-input-area {
+            display: flex;
+            gap: 10px;
+        }
+        #userInput {
+            flex-grow: 1;
+            padding: 10px 15px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            font-size: 1em;
+            outline: none;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+        #sendButton {
+            padding: 10px 20px;
+            background-color: #04341b;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+        #sendButton:hover {
+            background-color: #0056b3;
+        }
+        .message-bubble {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 18px;
+            margin-bottom: 10px;
+            word-wrap: break-word;
+            line-height: 1.4;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .user-message {
+            background-color: #dcf8c6;
+            align-self: flex-end;
+            margin-left: auto;
+            border-bottom-right-radius: 5px;
+        }
+        .bot-message {
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            align-self: flex-start;
+            margin-right: auto;
+            border-bottom-left-radius: 5px;
+        }
+        #chatMessages > div {
+            display: flex;
+        }
+        #map_container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="control-panel-container">
+        <h2 style="text-align: center;">SMART CONTROL PANEL</h2>
+        <div class="button-container">
+            <button class="action-button" onclick="sendAction('snipe')">작전개시</button>
+        </div>
+        <div>
+            <!-- <p class="center-text">실시간 정보를 확인하면서 발포 명령을 내리세요.</p> -->
+            <div id="chatMessages">
+                <p>실시간 정보를 확인하면서 발포 명령을 내리세요.</p>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="userInput" placeholder="좌표를 입력하세요.">
+                <button id="sendButton">발포</button>
+            </div>
+        </div>
+        <h3 class="center-text">🛰️ 실시간 LiDAR </h3>
+        <canvas id="map_canvas" width="300" height="300"></canvas>
+        <h3 class="center-text">🎯 TANK IMPACT </h3>
+        <div id="map_container">
+            <canvas id="map" width="300" height="300"></canvas>
+            <div id="tank"></div>
+            <div id="impact"></div>
+            <div id="realimpact"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = "http://127.0.0.1:5035";
+
+        const canvas = document.getElementById('map_canvas');
+        const ctx = canvas.getContext('2d');
+        const mapCanvas = document.getElementById('map');
+        const mapCtx = mapCanvas.getContext('2d');
+        const mapContainer = document.getElementById('map_container');
+        const tank = document.getElementById('tank');
+        const impact = document.getElementById('impact');
+        const realimpact = document.getElementById('realimpact');
+        const mapSize = 300;
+        let hideRealImpactTimeout = null;
+        let obstacles = [];
+        let playerPos = { x: 0, z: 0 };
+
+        function worldToCanvas(x, z) {
+            const scale = canvas.width / mapSize;
+            const canvasX = x * scale;
+            const canvasY = canvas.height - (z * scale);
+            return { x: canvasX, y: canvasY };
+        }
+
+        function drawFan(playerpos, playerLidarAngleZ) {
+            const degToRad = Math.PI / 180;
+            const canvasCenter = worldToCanvas(playerpos.x, playerpos.z);
+            const radius = 150;
+            const centerAngleDeg = playerLidarAngleZ.z;
+            const spreadDeg = 24.5;
+            const canvasStartAngle = (90 - (centerAngleDeg + spreadDeg)) * degToRad;
+            const canvasEndAngle = (90 - (centerAngleDeg - spreadDeg)) * degToRad;
+            ctx.beginPath();
+            ctx.moveTo(canvasCenter.x, canvasCenter.y);
+            ctx.arc(canvasCenter.x, canvasCenter.y, radius, canvasStartAngle, canvasEndAngle, false);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+            ctx.fill();
+        }
+    
+        function drawObstaclesOnImpactMap(obstacles, playerPos) {
+            mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+            const scale = mapCanvas.width / mapSize;
+
+            obstacles.forEach(obs => {
+                const x1 = (obs.x_min - playerPos.x) * scale + mapCanvas.width / 2;
+                const y1 = mapCanvas.height / 2 - (obs.z_max - playerPos.z) * scale;
+                const x2 = (obs.x_max - playerPos.x) * scale + mapCanvas.width / 2;
+                const y2 = mapCanvas.height / 2 - (obs.z_min - playerPos.z) * scale;
+
+                const width = x2 - x1;
+                const height = y2 - y1;
+
+                mapCtx.strokeStyle = 'red';
+                mapCtx.lineWidth = 2;
+                mapCtx.strokeRect(x1, y1, width, height);
+            });
+        }
+
+        function isPointInFan(point, playerpos, angleDeg, spreadDeg) {
+            const dx = point.x - playerpos.x;
+            const dz = point.z - playerpos.z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+            if (distance === 0) return true;
+            const degToRad = Math.PI / 180;
+            const angleFromPlayerToPointRad = Math.atan2(dx, dz);
+            let normalizedPointAngle = angleFromPlayerToPointRad;
+            if (normalizedPointAngle > Math.PI) normalizedPointAngle -= 2 * Math.PI;
+            if (normalizedPointAngle < -Math.PI) normalizedPointAngle += 2 * Math.PI;
+            let normalizedPlayerAngle = (angleDeg - 90) * degToRad;
+            if (normalizedPlayerAngle > Math.PI) normalizedPlayerAngle -= 2 * Math.PI;
+            if (normalizedPlayerAngle < -Math.PI) normalizedPlayerAngle += 2 * Math.PI;
+            let diff = normalizedPointAngle - normalizedPlayerAngle;
+            while (diff > Math.PI) diff -= 2 * Math.PI;
+            while (diff < -Math.PI) diff += 2 * Math.PI;
+            return Math.abs(diff) <= spreadDeg * degToRad;
+        }
+
+        async function drawMap(obstacles, lidar, playerpos, playerLidarAngleZ) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 1;
+            ctx.font = '10px sans-serif';
+            // obstacles.forEach(obs => {
+            //     const topLeft = worldToCanvas(obs.x_min, obs.z_max);
+            //     const bottomRight = worldToCanvas(obs.x_max, obs.z_min);
+            //     const w = bottomRight.x - topLeft.x;
+            //     const h = bottomRight.y - topLeft.y;
+            //     ctx.strokeRect(topLeft.x, topLeft.y, w, h);
+            //     ctx.fillStyle = 'red';
+            //     ctx.fillText(obs.id || '', topLeft.x + 2, topLeft.y - 2);
+            // });
+            ctx.font = '9px sans-serif';
+            lidar.forEach(p => {
+                const inFan = isPointInFan(p, playerpos, playerLidarAngleZ.z, 24.5);
+                const canvasPt = worldToCanvas(p.x, p.z);
+                ctx.beginPath();
+                ctx.arc(canvasPt.x, canvasPt.y, 2, 0, 2 * Math.PI);
+                ctx.fillStyle = inFan ? 'blue' : 'rgba(100,100,100,0.1)';
+                ctx.fill();
+            });
+            const meCanvas = worldToCanvas(playerpos.x, playerpos.z);
+            ctx.fillStyle = 'green';
+            ctx.beginPath();
+            ctx.arc(meCanvas.x, meCanvas.y, 3, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillText('Me', meCanvas.x + 5, meCanvas.y - 2);
+            drawFan(playerpos, playerLidarAngleZ);
+        }
+
+        async function fetchDataAndRender() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/data`);
+                const data = await res.json();
+                obstacles = data.obstacles;
+                playerPos = data.playerPos;
+                drawMap(obstacles, data.lidar, playerPos, data.playerLidarAngleZ);
+            } catch (err) {
+                console.error('데이터 가져오기 실패:', err);
+            }
+        }
+
+        fetchDataAndRender();
+        setInterval(fetchDataAndRender, 200);
+
+        function updateTank() {
+            fetch(`${API_BASE_URL}/tank_status`)
+                .then(res => res.json())
+                .then(data => {
+                    drawObstaclesOnImpactMap(obstacles, playerPos);
+                    const x = data.x || 0;
+                    const z = data.z || 0;
+                    const yaw = data.yaw || 0;
+                    const impact_x = data.impact_x;
+                    const impact_z = data.impact_z;
+                    const real_impact_x = data.real_impact_x;
+                    const real_impact_z = data.real_impact_z;
+                    const tankCanvasPos = worldToCanvas(x, z);
+                    tank.style.left = `${tankCanvasPos.x - 6}px`;
+                    tank.style.top = `${tankCanvasPos.y - 6}px`;
+                    tank.style.transform = `rotate(${yaw}deg)`;
+                    if (impact_x !== null && impact_z !== null) {
+                        const impactCanvasPos = worldToCanvas(impact_x, impact_z);
+                        impact.style.left = `${impactCanvasPos.x - 12}px`;
+                        impact.style.top = `${impactCanvasPos.y - 12}px`;
+                        impact.style.display = 'block';
+                    } else {
+                        impact.style.display = 'none';
+                    }
+                    if (real_impact_x !== 0 && real_impact_z !== 0) {
+                        const realImpactCanvasPos = worldToCanvas(real_impact_x, real_impact_z);
+                        realimpact.style.left = `${realImpactCanvasPos.x - 12}px`;
+                        realimpact.style.top = `${realImpactCanvasPos.y - 12}px`;
+                        realimpact.style.display = 'block';
+                        if (hideRealImpactTimeout) {
+                            clearTimeout(hideRealImpactTimeout);
+                        }
+                        hideRealImpactTimeout = setTimeout(() => {
+                            realimpact.style.display = 'none';
+                        }, 500);
+                    } else {
+                        realimpact.style.display = 'none';
+                    }
+                })
+                .catch(err => console.error('탱크 상태 가져오기 실패:', err));
+        }
+
+        setInterval(updateTank, 300);
+
+        async function sendAction(action) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/send_action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: action })
+                });
+                const result = await response.json();
+                console.log('Action sent:', result);
+                if (result.status === "success") {
+                    addMessageToChat('Bot', `"${action}" 명령: ${result.gemini_response}`);
+                    updateTank();
+                } else {
+                    addMessageToChat('Bot', `"${action}" 명령 실패: ${result.message}`);
+                }
+            } catch (error) {
+                console.error('Error sending action:', error);
+                addMessageToChat('Bot', '액션 전송 중 오류가 발생했습니다.');
+            }
+        }
+
+        const chatMessagesDiv = document.getElementById('chatMessages');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+
+        function addMessageToChat(sender, message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message-bubble');
+            if (sender === 'User') {
+                messageDiv.classList.add('user-message');
+            } else {
+                messageDiv.classList.add('bot-message');
+            }
+            messageDiv.textContent = message;
+            chatMessagesDiv.appendChild(messageDiv);
+            chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+        }
+
+        async function fetchChatHistory() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/chat_history`);
+                const history = await response.json();
+                chatMessagesDiv.innerHTML = '';
+                history.forEach(([sender, message]) => {
+                    addMessageToChat(sender, message);
+                });
+            } catch (error) {
+                console.error('채팅 기록 가져오기 실패:', error);
+            }
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (message === '') return;
+            userInput.value = '';
+            sendButton.disabled = true;
+            try {
+                const response = await fetch(`${API_BASE_URL}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_message: message, bot_response: "웹 입력 처리 중" })
+                });
+                if (response.status === 200) {
+                    fetchChatHistory();
+                } else {
+                    addMessageToChat('Bot', `오류: ${response.statusText}`);
+                }
+            } catch (error) {
+                console.error('메시지 전송 오류:', error);
+                addMessageToChat('Bot', '메시지 전송 중 오류가 발생했습니다.');
+            } finally {
+                sendButton.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        fetchChatHistory();
+        setInterval(fetchChatHistory, 1000);
+    </script>
+</body>
+</html>

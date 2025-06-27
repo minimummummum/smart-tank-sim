@@ -85,9 +85,7 @@ tank_status_data = {
     "impact_x": 0,
     "impact_z": 0,
     "real_impact_x": 0,
-    "real_impact_z": 0,
-    "goal_x": target_point[0] if target_point else None,
-    "goal_z": target_point[1] if target_point else None
+    "real_impact_z": 0
 }
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
@@ -444,8 +442,7 @@ def data():
         'obstacles': obstacles,
         'lidar': lidar_data,
         'playerPos': player_pos,
-        'playerLidarAngleZ': player_lidar_angle_z,
-        
+        'playerLidarAngleZ': player_lidar_angle_z
     })
 
 # Gemini API 키 설정 (실제 키로 교체 필요)

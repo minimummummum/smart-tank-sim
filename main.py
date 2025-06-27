@@ -30,7 +30,7 @@ tank_status_data = {
 }
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
-
+CHANNEL_INDEX = 6
 
 
 yolo_input_queue = Queue(maxsize=1)
@@ -50,7 +50,7 @@ target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
 # target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("yolov8x.pt").to("cuda")
+    model = YOLO("xmodel_test.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
@@ -268,7 +268,7 @@ def info():
     player_pos = {'x': data.get("playerPos", [])['x'], 'z': data.get("playerPos", [])['z']}
     lidar_data = []
     for point in lidar_data_raw:
-        if point.get('channelIndex') == 6:
+        if point.get('channelIndex') == CHANNEL_INDEX:
             angle = point.get('angle')
             pos = point.get('position', {})
             lidar_data.append({
@@ -424,4 +424,4 @@ if __name__ == '__main__':
                                                       init_input_queue, collision_input_queue, obstacles_input_queue, llm_input_queue))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5026, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5035, threaded=True, debug=False)
