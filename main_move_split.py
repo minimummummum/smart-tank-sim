@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify, render_template
-from flask_cors import CORS
 from multiprocessing import Process, Queue
 from ultralytics import YOLO
 from PIL import Image
@@ -35,7 +34,6 @@ SCENARIO = """
 (150, 50)으로 이동해서 보급을 받고, 다시 복귀하라
 """
 app = Flask(__name__)
-CORS(app) # 모든 도메인에 대해 CORS 허용 (개발용)
 lidar_data = []
 obstacles = []
 player_pos = []
@@ -48,13 +46,10 @@ tank_status_data = {
     "impact_x": 0,
     "impact_z": 0,
     "real_impact_x": 0,
-    "real_impact_z": 0,
-    "goal_x": target_point[0] if target_point else None,
-    "goal_z": target_point[1] if target_point else None
+    "real_impact_z": 0
 }
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
-CHANNEL_INDEX = 6
 
 yolo_input_queue = Queue(maxsize=1)
 yolo_output_queue = Queue(maxsize=1)
@@ -422,7 +417,7 @@ def info():
     player_pos = {'x': data.get("playerPos", [])['x'], 'z': data.get("playerPos", [])['z']}
     lidar_data = []
     for point in lidar_data_raw:
-        if point.get('channelIndex') == CHANNEL_INDEX:
+        if point.get('channelIndex') == 2:
             angle = point.get('angle')
             pos = point.get('position', {})
             lidar_data.append({
@@ -488,8 +483,6 @@ def update_obstacle():
     if not data.get("obstacles"):
         return jsonify({'status': 'error', 'message': 'No data received'}), 400
     obstacles_input_queue.put(data)
-    global obstacles
-    obstacles = data['obstacles']  # 맵에 넣을 장애물 데이터 할당
     return jsonify({'status': 'success', 'message': 'Obstacle data received'})
 
 @app.route('/collision', methods=['POST'])
@@ -540,7 +533,6 @@ def data():
         'lidar': lidar_data,
         'playerPos': player_pos,
         'playerLidarAngleZ': player_lidar_angle_z
-        
     })
 
 
@@ -558,4 +550,4 @@ if __name__ == '__main__':
                                                       obstacles_input_queue, llm_input_queue, llm_output_queue))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5035, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5030, threaded=True, debug=False)

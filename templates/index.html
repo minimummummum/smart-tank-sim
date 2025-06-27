@@ -456,37 +456,7 @@
                     }
                 });
         }
-
-
-                    // const tankCanvasPos = impactWorldToCanvas(x, z);
-                //     tank.style.left = `${tankCanvasPos.x - 6}px`;
-                //     tank.style.top = `${tankCanvasPos.y - 6}px`;
-                //     tank.style.transform = `rotate(${yaw}deg)`;
-                //     if (impact_x !== null && impact_z !== null) {
-                //         const impactCanvasPos = impactWorldToCanvas(impact_x, impact_z);
-                //         impact.style.left = `${impactCanvasPos.x - 12}px`;
-                //         impact.style.top = `${impactCanvasPos.y - 12}px`;
-                //         impact.style.display = 'block';
-                //     } else {
-                //         impact.style.display = 'none';
-                //     }
-                //     if (real_impact_x !== 0 && real_impact_z !== 0) {
-                //         const realImpactCanvasPos = impactWorldToCanvas(real_impact_x, real_impact_z);
-                //         realimpact.style.left = `${realImpactCanvasPos.x - 12}px`;
-                //         realimpact.style.top = `${realImpactCanvasPos.y - 12}px`;
-                //         realimpact.style.display = 'block';
-                //         if (hideRealImpactTimeout) {
-                //             clearTimeout(hideRealImpactTimeout);
-                //         }
-                //         hideRealImpactTimeout = setTimeout(() => {
-                //             realimpact.style.display = 'none';
-                //         }, 500);
-                //     } else {
-                //         realimpact.style.display = 'none';
-                //     }
-                // })
-                // .catch(err => console.error('탱크 상태 가져오기 실패:', err));
-        // }
+        
         function update() {
             updateTank();
             drawObstacles();  
