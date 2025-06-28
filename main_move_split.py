@@ -19,7 +19,7 @@ SCENARIO = """
 가장 적절한 다음 행동을 추론하여 제시하는 것입니다.
 **규칙:**
 1. **맵 사이즈:** 300x300 (좌표 범위: 0부터 299까지)
-2. **시작 좌표:** (80,32)
+2. **시작 좌표:** (5,295)
 3. **답변 형식:** 오직 다음 이동할 좌표와 사격 여부를 알려주면 됩니다. 형식은 pos:[100,100], fire:False 이며, fire는 적 인식 보고가 들어 왔을 때 가능하며, 사거리는 100이내 일 때 가능합니다.
 4. **언어:** 답변은 한글로만 합니다.
 5. **추론:** 당신 스스로 상황을 분석하고 최적의 좌표(이동할 최종 좌표)와 사격 여부를 선정해야 합니다.
@@ -28,10 +28,10 @@ SCENARIO = """
 현재 전쟁 중이며, 적 탱크 발견 시 한 대일 경우 무조건 사격하고, 여러대일 경우 무조건 회피하세요.
 사격할 때의 이동 좌표는 최종 목적지로 주세요.
 만약 회피할 경우, 좌표를 후퇴 좌표로 주지 말고 우회 좌표로 주세요.
-자동차나 사람을 발견하면 정찰을 가서 주변 파악을 하세요.
+자동차나 사람을 발견하면 그 쪽으로 근접해서 정찰하세요.
 이제 시뮬레이션을 시작합니다.
 시나리오 시작
-(150, 50)으로 이동해서 보급을 받고, 다시 복귀하라
+(280, 280)으로 이동해서 보급을 받고, 다시 복귀하라
 """
 app = Flask(__name__)
 lidar_data = []
@@ -239,14 +239,16 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                         else:
                             aim_flag = True
                             speed_flag = True
+                            stop_flag = True
                         
-                        llm_output_queue.put(f"{target_point}로 가던 도중 {tank_pos}까지 왔는데, (100, 150)에서 적 탱크 {tank_cnt_mode}대 발견! 조준 완료. 격파 여부 대기")
+                        llm_output_queue.put(f'{target_point}로 가던 도중 {tank_pos}까지 왔는데, 적 탱크 {tank_cnt_mode}대 발견! 조준 완료. 격파 여부 대기')
                         llm_report_flag = False
                         
             elif sum(car_cnt_list) >= 3 and llm_report_flag and car_flag: # Car 보고
-                llm_report_flag = False 
+                # llm_report_flag = False 
                 car_flag = False
-                llm_output_queue.put(f'현재 좌표: {tank_pos}, (280 , 150)에서 차 발견')
+                stop_flag = True
+                llm_output_queue.put(f'현재 좌표: {tank_pos}, (137, 100) 에서 차 발견')
             elif sum(human_cnt_list) >= 3 and llm_report_flag: # Human 보고 > llm에서 명령이 떨어지면 이동 
                 llm_report_flag = False
                 print(f"사람 발견! 명령 대기") # 팝업 창
@@ -258,9 +260,9 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             speed_flag = False    
 
 
-        if speed_flag:
-            if log_data.get("playerSpeed", 0.0) > 2:
-                actions[0] = -0.85
+        # if speed_flag:
+        #     if log_data.get("playerSpeed", 0.0) > 2:
+        #         actions[0] = -0.85
 
 
         if stop_flag:
@@ -502,9 +504,9 @@ def collision():
 def init():
     config = {
         "startMode": "start",
-        "blStartX": 80,
+        "blStartX": 5,
         "blStartY": 10,
-        "blStartZ": 32,
+        "blStartZ": 295,
         "rdStartX": 180,
         "rdStartY": -10,
         "rdStartZ": 60,
@@ -550,4 +552,4 @@ if __name__ == '__main__':
                                                       obstacles_input_queue, llm_input_queue, llm_output_queue))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5030, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5031, threaded=True, debug=False)
