@@ -205,7 +205,7 @@
     </div>
 
     <script>
-        const API_BASE_URL = "http://127.0.0.1:5035";
+        const API_BASE_URL = "http://127.0.0.1:5036";
 
         const canvas = document.getElementById('lidar_map_canvas');
         const ctx = canvas.getContext('2d');
@@ -415,17 +415,17 @@
                     tank.style.transform = `rotate(${yaw}deg)`;
                     
                     // 목적지 깃발
-                    // const goal_x = data.goal_x;
-                    // const goal_z = data.goal_z;
+                    const goal_x = data.goal_x;
+                    const goal_z = data.goal_z;
 
-                    // if (goal_x !== null && goal_z !== null) {
-                    //     const goalMapPos = impactWorldToCanvas(goal_x, goal_z);
-                    //     goalFlag.style.left = `${goalMapPos.x}px`;
-                    //     goalFlag.style.top = `${goalMapPos.y}px`;
-                    //     goalFlag.style.display = 'block'; // 목표 지점이 있으면 깃발 표시
-                    // } else {
-                    //     goalFlag.style.display = 'none'; // 목표 지점이 없으면 깃발 숨김
-                    // }
+                    if (goal_x !== null && goal_z !== null) {
+                        const goalMapPos = impactWorldToCanvas(goal_x, goal_z);
+                        goalFlag.style.left = `${goalMapPos.x}px`;
+                        goalFlag.style.top = `${goalMapPos.y}px`;
+                        goalFlag.style.display = 'block'; // 목표 지점이 있으면 깃발 표시
+                    } else {
+                        goalFlag.style.display = 'none'; // 목표 지점이 없으면 깃발 숨김
+                    }
 
                     // 착탄 위치
                     if (impact_x !== null && impact_z !== null) {
@@ -456,7 +456,7 @@
                     }
                 });
         }
-        
+
         function update() {
             updateTank();
             drawObstacles();  

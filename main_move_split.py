@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, render_template
 from multiprocessing import Process, Queue
+from flask_cors import CORS
 from ultralytics import YOLO
 from PIL import Image
 import numpy as np
@@ -34,6 +35,7 @@ SCENARIO = """
 (150, 50)으로 이동해서 보급을 받고, 다시 복귀하라
 """
 app = Flask(__name__)
+CORS(app)
 lidar_data = []
 obstacles = []
 player_pos = []
@@ -46,7 +48,9 @@ tank_status_data = {
     "impact_x": 0,
     "impact_z": 0,
     "real_impact_x": 0,
-    "real_impact_z": 0
+    "real_impact_z": 0,
+    "goal_x":None,
+    "goal_z":None
 }
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
@@ -64,6 +68,7 @@ info_output_queue = Queue(maxsize=1)
 obstacles_input_queue = Queue(maxsize=1)
 llm_input_queue = Queue(maxsize=1)
 llm_output_queue = Queue(maxsize=1)
+target_point_queue = Queue(maxsize=1)
 
 # target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
 target_classes = {1: "Car", 0: "E_Tank", 2: "Human"}
@@ -80,7 +85,8 @@ def yolo_worker(yolo_input_q, yolo_output_q):
 
 
 def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
-                  info_input_q, info_output_q, init_input_q, collision_input_q, obstacles_input_q, llm_input_q, llm_output_q):
+                  info_input_q, info_output_q, init_input_q, collision_input_q, 
+                  obstacles_input_q, llm_input_q, llm_output_q, target_point_q):
     hit_data = None
     detections = None
     init_data = None
@@ -107,6 +113,12 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         except queue.Empty:
             init_data = None
         if init_data:
+            # clear_queue(action_input_queue, action_output_queue,
+            #             hit_input_queue, detect_input_queue,
+            #             info_input_queue, info_output_queue,
+            #             init_input_queue, collision_input_queue,
+            #             obstacles_input_queue, llm_input_queue,
+            #             llm_output_queue, target_point_queue)
             clear_queue(action_input_queue, action_output_queue,
                         hit_input_queue, detect_input_queue,
                         info_input_queue, info_output_queue,
@@ -177,6 +189,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             llm_pos, llm_fire = llm_request
             llm_request = None
             target_point = llm_pos
+            
+            print(f"Action worker received new LLM target: {target_point}")
             speed_flag = False
             # aim_flag = False
             stop_flag = False
@@ -185,6 +199,14 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         if target_point:
             actions = astar.get_action(log_data, target_point)
             distance = np.hypot(target_point[0] - tank_pos[0], target_point[1] - tank_pos[1])
+            print("🎠", target_point)
+            tank_status_data.update({
+                "goal_x":target_point[0],
+                "goal_z":target_point[1]
+
+            })
+            print("😍", tank_status_data)
+
             if distance < 5 and not goal_flag and not llm_report_flag:
                 goal_flag = True
                 llm_report_flag = True
@@ -425,6 +447,7 @@ def info():
                 'x': pos.get('x'),
                 'z': pos.get('z')
             })
+
     try:
         response = info_output_queue.get(timeout=1)
     except queue.Empty:
@@ -483,6 +506,8 @@ def update_obstacle():
     if not data.get("obstacles"):
         return jsonify({'status': 'error', 'message': 'No data received'}), 400
     obstacles_input_queue.put(data)
+    global obstacles
+    obstacles = data['obstacles']
     return jsonify({'status': 'success', 'message': 'Obstacle data received'})
 
 @app.route('/collision', methods=['POST'])
@@ -532,7 +557,8 @@ def data():
         'obstacles': obstacles,
         'lidar': lidar_data,
         'playerPos': player_pos,
-        'playerLidarAngleZ': player_lidar_angle_z
+        'playerLidarAngleZ': player_lidar_angle_z,
+
     })
 
 
@@ -543,11 +569,20 @@ def get_chat_history():
 if __name__ == '__main__':
     logging.getLogger('werkzeug').setLevel(logging.WARNING)  # 불필요한 로그 감소
     yolo_proc = Process(target=yolo_worker, args=(yolo_input_queue, yolo_output_queue))
+    # action_proc = Process(target=action_worker, args=(action_input_queue, action_output_queue,
+    #                                                   hit_input_queue, detect_input_queue,
+    #                                                   info_input_queue, info_output_queue,
+    #                                                   init_input_queue, collision_input_queue,
+    #                                                   obstacles_input_queue, llm_input_queue,
+    #                                                   llm_output_queue, target_point_queue
+    #                                                   ))
     action_proc = Process(target=action_worker, args=(action_input_queue, action_output_queue,
                                                       hit_input_queue, detect_input_queue,
                                                       info_input_queue, info_output_queue,
                                                       init_input_queue, collision_input_queue,
-                                                      obstacles_input_queue, llm_input_queue, llm_output_queue))
+                                                      obstacles_input_queue, llm_input_queue,
+                                                      llm_output_queue
+                                                      ))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5030, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5036, threaded=True, debug=False)

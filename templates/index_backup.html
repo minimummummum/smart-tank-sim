@@ -383,7 +383,7 @@
             const data = await res.json();
             obstacles = data.obstacles;
             playerPos = data.playerPos;
-            drawMap(obstacles, data.lidar, data.playerPos, data.playerLidarAngleZ);
+            drawMap(obstacles, data.lidar, playerPos, data.playerLidarAngleZ);
         } catch (err) {
             console.error('데이터 가져오기 실패:', err);
             }
