@@ -14,6 +14,10 @@ class Aim():
         self.enemy_x = log_data.get("enemyPos", {}).get("x")
         self.enemy_y = log_data.get("enemyPos", {}).get("y")
         self.enemy_z = log_data.get("enemyPos", {}).get("z")
+        # 테스트
+        self.enemy_x = 167.6562
+        self.enemy_y = 8.34
+        self.enemy_z = 50
         self.speed = log_data.get("playerSpeed")
         # 포탑 각도
         self.turret_x = log_data.get("playerTurretX")
@@ -27,11 +31,9 @@ class Aim():
         initial_speed = 54
         turret_length = 5.891
         turret_offset = turret_length / 2
-        print("y:", y, "target_y", target_y)
         # y 좌표는 포탑 높이를 고려하여 조정
         #y -= 5
         y -= target_y - 3
-        print(y)
         # yaw를 라디안으로 변환
         yaw = math.radians(yaw_deg)
 
@@ -123,7 +125,6 @@ class Aim():
                 turret_dy = 0.0
             turret_dx *= 1 - distance/1500
             #turret_dy = 0.3  if pitch_error > 0 else (-0.3 if pitch_error < -0 else 0)
-            print(yaw_error, pitch_error)
             fire = 1 if abs(yaw_error) < 1 and abs(pitch_error) < 1 else 0
             action = [turret_dx, turret_dy, fire]
 
