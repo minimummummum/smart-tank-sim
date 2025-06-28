@@ -18,10 +18,10 @@ action_output_queue = Queue()
 detections = None
 log_data = None
 
-target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
+target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
 # YOLO 모델 백그라운드 프로세스
 def yolo_worker(input_q, output_q):
-    model = YOLO("yolov8n.pt").to("cuda")
+    model = YOLO("yolov8l_e500_s512+s416_b16.pt").to("cuda")
     while True:
         image = input_q.get()
         if image is None:  # 종료 시그널
