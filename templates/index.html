@@ -70,10 +70,11 @@
             top: 0;
             left: 0;
         }
-        #tank, #impact, #realimpact { /* 탱크, 충돌 표시 */
+        #tank, #realimpact{ /* 탱크, 충돌 표시 */
             position: absolute;
             border-radius: 50%;
             transform-origin: center;
+            transform: translate(-50%, -50%);
         }
         #tank {
             width: 12px;
@@ -81,14 +82,19 @@
             background-color: blue;
         }
         #impact {
+            position: absolute;
+            border-radius: 50%;
+            transform-origin: center;
+            opacity: 0.5;
             width: 24px;
             height: 24px;
+            transform: translate(-50%, -50%);
             background-color: black;
             display: none;
         }
         #realimpact {
-            width: 24px;
-            height: 24px;
+            width: 12px;
+            height: 12px;
             background-color: red;
             display: none;
         }
@@ -208,6 +214,7 @@
         const API_BASE_URL = "http://127.0.0.1:5036";
 
         const canvas = document.getElementById('lidar_map_canvas');
+        
         const ctx = canvas.getContext('2d');
         const mapCanvas = document.getElementById('map');
         const mapCtx = mapCanvas.getContext('2d');
@@ -223,7 +230,8 @@
         let obstacles = [];
         let playerPos = {};
         let backgroundImage = new Image();
-
+        let bot_prevCommand = null;
+        let user_prevCommand = null;
         function loadBackgroundImage() {
             backgroundImage.onload = function() {
                 drawBackground();
@@ -247,9 +255,9 @@
         }
 
         function impactWorldToCanvas(x, z) {
-            const scale = canvas.width / mapSize;
+            const scale = mapCanvas.width / mapSize;
             const canvasX = x * scale;
-            const canvasY = canvas.height - (z * scale);
+            const canvasY = mapCanvas.height - (z * scale);
             return { x: canvasX, y: canvasY };
         }
 
@@ -287,8 +295,8 @@
                 const bottomRightCanvas = impactWorldToCanvas(obs.x_max, obs.z_min);
                 const width = bottomRightCanvas.x - topLeftCanvas.x;
                 const height = bottomRightCanvas.y - topLeftCanvas.y;
-                mapCtx.strokeStyle = 'red';
-                mapCtx.lineWidth = 2;
+                mapCtx.strokeStyle = 'black';
+                mapCtx.lineWidth = 1;
                 mapCtx.strokeRect(topLeftCanvas.x, topLeftCanvas.y, width, height);
             });
         }
@@ -312,24 +320,11 @@
 
         function drawMap(obstacles, lidar, playerpos, playerLidarAngleZ) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // 라이다 장애물표시
-            ctx.strokeStyle = 'red';
-            ctx.lineWidth = 1;
-            ctx.font = '10px sans-serif';
-            obstacles.forEach(obs => {
-                const topLeft = worldToCanvas(obs.x_min, obs.z_max);
-                const bottomRight = worldToCanvas(obs.x_max, obs.z_min);
-                const w = bottomRight.x - topLeft.x;
-                const h = bottomRight.y - topLeft.y;
-                ctx.strokeRect(topLeft.x, topLeft.y, w, h);
-                ctx.fillStyle = 'red';
-                ctx.fillText(obs.id || '', topLeft.x + 2, topLeft.y - 2);
-            });
             // 라이더 포인트(부채꼴 안은 블루, 바깥은 흐리게)
             ctx.font = '9px sans-serif';
             lidar.forEach(p => {
                 const inFan = isPointInFan(p, playerpos, playerLidarAngleZ.z, 24.5);
-                const canvasPt = worldToCanvas(p.x, p.z, playerPos);
+                const canvasPt = worldToCanvas(p.x, p.z, playerpos);
                 ctx.beginPath();
                 ctx.arc(canvasPt.x, canvasPt.y, 2, 0, 2 * Math.PI);
                 ctx.fillStyle = inFan ? 'blue' : 'rgba(100,100,100,0.1)';
@@ -406,12 +401,21 @@
                     const impact_z = data.impact_z;
                     const real_impact_x = data.real_impact_x;
                     const real_impact_z = data.real_impact_z;
-
+                    const bot_command = data.bot_command
+                    const user_command = data.user_command
+                    if (bot_command !== bot_prevCommand) {
+                        addMessageToChat('Bot', `${bot_command}`);
+                    }
+                    bot_prevCommand = bot_command;
+                    if (user_command !== user_prevCommand) {
+                        addMessageToChat('User', `${user_command}`);
+                    }
+                    user_prevCommand = user_command;
                     // 탱크 위치
                     const mapX = x;
                     const mapY = mapSize - z;
-                    tank.style.left = `${mapX - 6}px`;
-                    tank.style.top = `${mapY - 6}px`;
+                    tank.style.left = `${mapX}px`;
+                    tank.style.top = `${mapY}px`;
                     tank.style.transform = `rotate(${yaw}deg)`;
                     
                     // 목적지 깃발
@@ -431,8 +435,8 @@
                     if (impact_x !== null && impact_z !== null) {
                         const impactX = impact_x;
                         const impactY = mapSize - impact_z;
-                        impact.style.left = `${impactX - 6}px`;
-                        impact.style.top = `${impactY - 6}px`;
+                        impact.style.left = `${impactX}px`;
+                        impact.style.top = `${impactY}px`;
                         impact.style.display = 'block';
                     } else {
                         impact.style.display = 'none';
@@ -442,8 +446,8 @@
                     if (real_impact_x !== 0 && real_impact_z !== 0) {
                         const realImpactX = real_impact_x;
                         const realImpactY = mapSize - real_impact_z;
-                        realimpact.style.left = `${realImpactX - 12}px`;
-                        realimpact.style.top = `${realImpactY - 12}px`;
+                        realimpact.style.left = `${realImpactX}px`;
+                        realimpact.style.top = `${realImpactY}px`;
                         realimpact.style.display = 'block';
 
                         // 이전 타이머 제거 후 새 타이머 설정
