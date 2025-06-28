@@ -55,7 +55,7 @@ class Path:
                 이 부분이 거리에 따라 obstacles의 를 가지고 오는 부분입니다.
                 전체 obstacles를 가지고 여기서 분류합니다.
                 '''
-                if distance < 100:
+                if distance < 500:
                     for x in range(x_min, x_max + 1):
                         for z in range(z_min, z_max + 1):
                             self.initial_obstacles.append({
@@ -119,7 +119,6 @@ class Path:
             self.body_z = int(round(log_data.get("playerBodyZ", 0.0)))
             self.tank_speed = np.clip(int(round(log_data.get("playerSpeed", 0.0))), 0, 70)
             distance = np.hypot(target_point[0] - self.tank_x, target_point[1] - self.tank_z)
-            print("거리: ", distance)
             if distance < 5:
                 return [-10.0, 0.0]
             else:
@@ -133,7 +132,6 @@ class Path:
                 latest_log_data = log_data.get('lidarPoints',{})
                 latest_log_data=[p for p in latest_log_data if p['isDetected']]
 
-            print(target_point, self.path)
 
             if latest_log_data and self.path_check:
                 self.current_path_index = 1
@@ -176,7 +174,6 @@ class Path:
             else:
                 movead = 0.0
             movews = 1.0 # * min(0.01, (180 - yaw_error))
-            print(f"tank: {log_data.get('playerBodyX', 0)}, target_yaw: {target_yaw}, yaw_error: {yaw_error}, movead: {movead}")
             # # 상대 방향: 내가 보는 방향이 목표 기준에서 얼마나 벗어났는지
 
             # if 90 <= toward_angle <= 180:
@@ -205,7 +202,7 @@ class Path:
             #     movews = 1.0
             #     movead = -0.5
 
-            if log_data.get("playerSpeed", 0.0) > 7:
+            if log_data.get("playerSpeed", 0.0) > 5:
                 movews = -0.85
 
             return [movews, movead]
@@ -332,7 +329,6 @@ class Path:
             
             pathfinder.update_obstacles(self.initial_obstacles,start_world,end_world)
 
-            print(f'장애물 개수: {len(self.initial_obstacles)}')
 
         except queue.Empty:
             print("Queue is empty.")
@@ -350,10 +346,8 @@ class Path:
 
                 self.path = simplified_path
 
-                print(f'경로 길이: {len(self.path)}')
 
                 if simplified_path:
-                    print("경로 시각화 가능.")
                     '''#####################################
                     ##########경로 시각화 하는 코드입니다#######
                     ########################################'''
