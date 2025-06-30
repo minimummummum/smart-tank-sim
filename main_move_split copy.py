@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 from multiprocessing import Process, Queue
 from ultralytics import YOLO
 from PIL import Image
@@ -13,7 +14,65 @@ import google.generativeai as genai
 import core.path_Finder as pf 
 import core.aim as aim
 
+# # flat map test -> 도착 지점 (80, 265)
+# CONFIG = {
+#         "startMode": "start",  # Options: "start" or "pause"
+#         "blStartX": 80,  #Blue Start Position
+#         "blStartY": 10,
+#         "blStartZ": 32,
+#         "rdStartX": 10, #Red Start Position (146, 36)
+#         "rdStartY": 0,
+#         "rdStartZ": 10,
+#         "trackingMode": True,
+#         "detactMode": True,
+#         "logMode" :True,
+#         "enemyTracking": False,
+#         "saveSnapshot": False,
+#         "saveLog": False,
+#         "saveLidarData": False,
+#         "lux": 30000
+#     }
+
+# # S1 map -> 도착 지점 (207, 56)
+# CONFIG = {
+#         "startMode": "start",  # Options: "start" or "pause"
+#         "blStartX": 20,  #Blue Start Position
+#         "blStartY": 10,
+#         "blStartZ": 280, 
+#         "rdStartX": 211, #Red Start Position (146, 36)
+#         "rdStartY": 10,
+#         "rdStartZ": 240,
+#         "trackingMode": True,
+#         "detactMode": True,
+#         "logMode" :True,
+#         "enemyTracking": False,
+#         "saveSnapshot": False,
+#         "saveLog": False,
+#         "saveLidarData": False,
+#         "lux": 30000
+#     }
+
+# S2 map -> 도착 지점 (20, 280)
+CONFIG = {
+        "startMode": "start",  # Options: "start" or "pause"
+        "blStartX": 207,  #Blue Start Position
+        "blStartY": 10,
+        "blStartZ": 56, 
+        "rdStartX": 211, #Red Start Position (146, 36)
+        "rdStartY": 10,
+        "rdStartZ": 240,
+        "trackingMode": True,
+        "detactMode": True,
+        "logMode" :True,
+        "enemyTracking": False,
+        "saveSnapshot": False,
+        "saveLog": False,
+        "saveLidarData": False,
+        "lux": 30000
+    }
+
 app = Flask(__name__)
+CORS(app) # 모든 도메인에 대해 CORS 허용 (개발용)
 lidar_data = []
 obstacles = []
 player_pos = []
@@ -32,7 +91,6 @@ obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
 CHANNEL_INDEX = 6
 
-
 yolo_input_queue = Queue(maxsize=1)
 yolo_output_queue = Queue(maxsize=1)
 action_input_queue = Queue(maxsize=1)
@@ -45,8 +103,8 @@ info_input_queue = Queue(maxsize=1)
 info_output_queue = Queue(maxsize=1)
 obstacles_input_queue = Queue(maxsize=1)
 llm_input_queue = Queue(maxsize=1)
-target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
 # target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
+target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
 # target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 
 def yolo_worker(yolo_input_q, yolo_output_q):
@@ -73,7 +131,9 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     actions = None
     speed_flag = False
     fire_flag = False
+    stop_flag= False
     while True:
+        tank_cnt = 0
         try:
             init_data = init_input_q.get_nowait()
             print("init 데이터 수신됨:", init_data)
@@ -85,6 +145,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                         info_input_queue, info_output_queue,
                         init_input_queue, collision_input_queue, obstacles_input_queue, llm_input_queue)
             info_output_q.put({"status": "success", "control": ""})
+            target_point=None
             continue
 
         log_data = info_input_q.get()
@@ -141,32 +202,43 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             print(target_point)
             speed_flag = False
             fire_flag = False
+            stop_flag = False
             clear_queue(detect_input_q)
         if target_point:
             actions = astar.get_action(log_data, target_point)
         if actions is None:
             continue
 
-
+        
         try:
             detections = detect_input_q.get_nowait()
         except queue.Empty:
             detections = None
         if detections:
+            # tank_cnt : 한 프레임에서 detect된 탱크 수
             for box in detections:
-                if int(box[5]) in [0, 3, 4] and box[4] > 0.8:
+                if int(box[5]) in [0, 1, 2] and box[4] > 0.80:
                     print(detections)
                     print("객체 감지")
                     speed_flag = True
                     clear_queue(detect_input_q)
-                    if int(box[5]) == 3:
-                        fire_flag = True
+                    if int(box[5]) == 0:
+                        tank_cnt+=1
+            if tank_cnt == 1:
+                # 탱크 한 대를 봤을 때, 주변에 탱크가 더 있는지 확인하고, 최종 탱크 수를 결정하여 보고하도록 하는 코드 필요
+                fire_flag=True
+            elif tank_cnt >= 2:
+                stop_flag = True
+                fire_flag = False
+        print("🚗:",tank_cnt)
                     
         if speed_flag:
-            #if log_data.get("playerSpeed", 0.0) > 2:
-                #actions[0] = -0.85
-            actions[0] = -10.0 # 정지
-            actions[1] = 0
+            if log_data.get("playerSpeed", 0.0) > 5:
+                actions[0] = -0.85
+            # actions[0] = -10.0 # 정지
+        if stop_flag:
+            actions[0] = -10.0
+            
         print(actions)
         if actions[0] > 0:
             movews = "W"
@@ -210,7 +282,7 @@ def detect():
     filtered_results = []
     for box in detections:
         class_id = int(box[5])
-        if class_id in target_classes and box[4] > 0.5:
+        if class_id in target_classes and box[4] > 0.80:
             filtered_results.append({
                 'className': target_classes[class_id],
                 'bbox': [float(coord) for coord in box[:4]],
@@ -334,6 +406,8 @@ def update_obstacle():
     if not data.get("obstacles"):
         return jsonify({'status': 'error', 'message': 'No data received'}), 400
     obstacles_input_queue.put(data)
+    global obstacles
+    obstacles = data['obstacles']  # 맵에 넣을 장애물 데이터 할당
     print("🪨 Obstacle Data:", data)
     return jsonify({'status': 'success', 'message': 'Obstacle data received'})
 
@@ -352,23 +426,7 @@ def collision():
 
 @app.route('/init', methods=['GET'])
 def init():
-    config = {
-        "startMode": "start",
-        "blStartX": 80,
-        "blStartY": 10,
-        "blStartZ": 32.23,
-        "rdStartX": 180,
-        "rdStartY": 10,
-        "rdStartZ": 60,
-        "trackingMode": True,
-        "detactMode": False,
-        "logMode": True,
-        "enemyTracking": False,
-        "saveSnapshot": False,
-        "saveLog": False,
-        "saveLidarData": False,
-        "lux": 30000
-    }
+    config = CONFIG
     print("🛠️ Initialization config sent via /init:", config)
     init_input_queue.put(True)
     return jsonify(config)
@@ -399,16 +457,16 @@ def receive_chat():
         if not data or 'user_message' not in data:
             return jsonify({"status": "error", "message": "Invalid data format"}), 400
         user_message = data['user_message']
-        try:
-            response = chat.send_message(user_message)
-            bot_response = response.text
-        except Exception as e:
-            bot_response = f"Gemini API 오류: {str(e)}"
-        print(f"Flask 서버에서 받은 메시지 - 사용자: {user_message}, 봇: {bot_response}")
-        llm_input_queue.put(bot_response)
+        #try:
+            #response = chat.send_message(user_message)
+            #bot_response = response.text
+        #except Exception as e:
+            #bot_response = f"Gemini API 오류: {str(e)}"
+        print(f"Flask 서버에서 받은 메시지 - 사용자: {user_message}")
+        llm_input_queue.put(user_message) # bot_response -> user_message 임의로 llm 해제
         chat_history.append(("User", user_message))
-        chat_history.append(("Bot", bot_response))
-        return jsonify({"status": "success", "response": bot_response}), 200
+        #chat_history.append(("Bot", bot_response))
+        return jsonify({"status": "success", "response": user_message}), 200
     return jsonify({"status": "error", "message": "Method not allowed"}), 405
 
 @app.route('/chat_history', methods=['GET'])

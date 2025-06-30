@@ -70,11 +70,10 @@
             top: 0;
             left: 0;
         }
-        #tank, #realimpact{ /* 탱크, 충돌 표시 */
+        #tank, #impact, #realimpact { /* 탱크, 충돌 표시 */
             position: absolute;
             border-radius: 50%;
             transform-origin: center;
-            transform: translate(-50%, -50%);
         }
         #tank {
             width: 12px;
@@ -82,19 +81,14 @@
             background-color: blue;
         }
         #impact {
-            position: absolute;
-            border-radius: 50%;
-            transform-origin: center;
-            opacity: 0.5;
             width: 24px;
             height: 24px;
-            transform: translate(-50%, -50%);
             background-color: black;
             display: none;
         }
         #realimpact {
-            width: 12px;
-            height: 12px;
+            width: 24px;
+            height: 24px;
             background-color: red;
             display: none;
         }
@@ -230,8 +224,7 @@
         let obstacles = [];
         let playerPos = {};
         let backgroundImage = new Image();
-        let bot_prevCommand = null;
-        let user_prevCommand = null;
+
         function loadBackgroundImage() {
             backgroundImage.onload = function() {
                 drawBackground();
@@ -401,22 +394,12 @@
                     const impact_z = data.impact_z;
                     const real_impact_x = data.real_impact_x;
                     const real_impact_z = data.real_impact_z;
-                    const bot_command = data.bot_command
-                    const user_command = data.user_command
-                    if (user_command !== user_prevCommand) {
-                        addMessageToChat('User', `${user_command}`);
-                    }
-                    user_prevCommand = user_command;
-                    if (bot_command !== bot_prevCommand) {
-                        addMessageToChat('Bot', `${bot_command}`);
-                    }
-                    bot_prevCommand = bot_command;
-                    
+
                     // 탱크 위치
                     const mapX = x;
                     const mapY = mapSize - z;
-                    tank.style.left = `${mapX}px`;
-                    tank.style.top = `${mapY}px`;
+                    tank.style.left = `${mapX - 6}px`;
+                    tank.style.top = `${mapY - 6}px`;
                     tank.style.transform = `rotate(${yaw}deg)`;
                     
                     // 목적지 깃발
@@ -436,8 +419,8 @@
                     if (impact_x !== null && impact_z !== null) {
                         const impactX = impact_x;
                         const impactY = mapSize - impact_z;
-                        impact.style.left = `${impactX}px`;
-                        impact.style.top = `${impactY}px`;
+                        impact.style.left = `${impactX - 6}px`;
+                        impact.style.top = `${impactY - 6}px`;
                         impact.style.display = 'block';
                     } else {
                         impact.style.display = 'none';
@@ -447,8 +430,8 @@
                     if (real_impact_x !== 0 && real_impact_z !== 0) {
                         const realImpactX = real_impact_x;
                         const realImpactY = mapSize - real_impact_z;
-                        realimpact.style.left = `${realImpactX}px`;
-                        realimpact.style.top = `${realImpactY}px`;
+                        realimpact.style.left = `${realImpactX - 12}px`;
+                        realimpact.style.top = `${realImpactY - 12}px`;
                         realimpact.style.display = 'block';
 
                         // 이전 타이머 제거 후 새 타이머 설정
