@@ -15,9 +15,9 @@ class Aim():
         self.enemy_y = log_data.get("enemyPos", {}).get("y")
         self.enemy_z = log_data.get("enemyPos", {}).get("z")
         # 테스트
-        self.enemy_x = 167.6562
+        self.enemy_x = 170
         self.enemy_y = 8.34
-        self.enemy_z = 50
+        self.enemy_z = 260
         self.speed = log_data.get("playerSpeed")
         # 포탑 각도
         self.turret_x = log_data.get("playerTurretX")

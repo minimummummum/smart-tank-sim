@@ -403,14 +403,15 @@
                     const real_impact_z = data.real_impact_z;
                     const bot_command = data.bot_command
                     const user_command = data.user_command
-                    if (bot_command !== bot_prevCommand) {
-                        addMessageToChat('Bot', `${bot_command}`);
-                    }
-                    bot_prevCommand = bot_command;
                     if (user_command !== user_prevCommand) {
                         addMessageToChat('User', `${user_command}`);
                     }
                     user_prevCommand = user_command;
+                    if (bot_command !== bot_prevCommand) {
+                        addMessageToChat('Bot', `${bot_command}`);
+                    }
+                    bot_prevCommand = bot_command;
+                    
                     // 탱크 위치
                     const mapX = x;
                     const mapY = mapSize - z;
