@@ -145,7 +145,6 @@ class AStarPathfinder:
 
         while open_set:
             current_node = heapq.heappop(open_set)
-
             # 목적지에 도달했으면 경로 재구성
             if (current_node.x, current_node.z) == (end_gx, end_gz):
                 path = []

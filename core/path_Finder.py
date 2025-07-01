@@ -6,7 +6,7 @@ import time
 import matplotlib.pyplot as plt
 from .a_star_pathfinder import AStarPathfinder
 import traceback
-CHANNEL_INDEX = 6
+CHANNEL_INDEX = 7
 class Path:
     def __init__(self):
         self.initial_obstacles = []

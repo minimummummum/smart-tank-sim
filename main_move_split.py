@@ -190,7 +190,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         if llm_request:
             llm_pos, llm_fire = llm_request
             llm_request = None
-            target_point = llm_pos
+            # target_point = llm_pos
             if target_point:
                 target_point_q.put(target_point)
             print(f"Action worker received new LLM target: {target_point}")
@@ -199,6 +199,10 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             stop_flag = False
             clear_queue(detect_input_q)
         tank_pos = (int(log_data.get("playerPos", {}).get("x")), int(log_data.get("playerPos", {}).get("z")))
+        #######################################################################
+        # target_point, llm_fire = [140,50],True
+        target_point= [140,20]
+        ########################################################################
         if target_point:
             actions = astar.get_action(log_data, target_point)
             distance = np.hypot(target_point[0] - tank_pos[0], target_point[1] - tank_pos[1])
@@ -582,9 +586,9 @@ def collision():
 def init():
     config = {
         "startMode": "start",
-        "blStartX": 5,
+        "blStartX": 180,
         "blStartY": 10,
-        "blStartZ": 295,
+        "blStartZ": 140,
         "rdStartX": 180,
         "rdStartY": -10,
         "rdStartZ": 60,
@@ -640,4 +644,4 @@ if __name__ == '__main__':
                                                       ))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5036, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5001, threaded=True, debug=False)
