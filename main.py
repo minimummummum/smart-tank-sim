@@ -50,7 +50,7 @@ target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
 # target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("xmodel_test.pt").to("cuda")
+    model = YOLO("yolov8x_e500_s512_b8.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
@@ -424,4 +424,4 @@ if __name__ == '__main__':
                                                       init_input_queue, collision_input_queue, obstacles_input_queue, llm_input_queue))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5035, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5036, threaded=True, debug=False)

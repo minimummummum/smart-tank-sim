@@ -432,6 +432,31 @@
                         goalFlag.style.display = 'none'; // 목표 지점이 없으면 깃발 숨김
                     }
 
+                    // path
+                    if (data.path && Array.isArray(data.path) && data.path.length > 1) {
+                        mapCtx.beginPath();
+                        mapCtx.strokeStyle = 'orange';
+                        mapCtx.lineWidth = 2;
+
+                        const start = impactWorldToCanvas(data.path[0].x, data.path[0].z);
+                        mapCtx.moveTo(start.x, start.y);
+
+                        for (let i = 1; i < data.path.length; i++) {
+                            const pt = impactWorldToCanvas(data.path[i].x, data.path[i].z);
+                            mapCtx.lineTo(pt.x, pt.y);
+                        }
+
+                        mapCtx.stroke();
+
+                        // 마지막 지점에 점 그리기 (선택사항)
+                        // const end = impactWorldToCanvas(data.path[data.path.length - 1].x, data.path[data.path.length - 1].z);
+                        // mapCtx.beginPath();
+                        // mapCtx.arc(end.x, end.y, 4, 0, 2 * Math.PI);
+                        // mapCtx.fillStyle = 'red';
+                        // mapCtx.fill();
+                    }
+
+
                     // 착탄 위치
                     if (impact_x !== null && impact_z !== null) {
                         const impactX = impact_x;
