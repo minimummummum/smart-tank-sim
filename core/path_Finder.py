@@ -6,7 +6,7 @@ import time
 import matplotlib.pyplot as plt
 from .a_star_pathfinder import AStarPathfinder
 import traceback
-CHANNEL_INDEX = 6
+CHANNEL_INDEX = 3
 class Path:
     def __init__(self):
         self.initial_obstacles = []
@@ -22,6 +22,7 @@ class Path:
         self.last_calculated_target = None
         self.MIN_NEXT_POINT_DISTANCE = 5
         self.path_check = True
+        self.pathfinder = None
 
     def update_obstacle(self, obstacle_data):
 
@@ -174,33 +175,6 @@ class Path:
             else:
                 movead = 0.0
             movews = 1.0 # * min(0.01, (180 - yaw_error))
-            # # 상대 방향: 내가 보는 방향이 목표 기준에서 얼마나 벗어났는지
-
-            # if 90 <= toward_angle <= 180:
-            #     movews = -10.0
-            #     movead = 1.7
-            # elif 40 <= toward_angle < 90:
-            #     movews = 0.1
-            #     movead = 1.2
-            # elif 20 <= toward_angle < 40:
-            #     movews = 0.3
-            #     movead = 0.9
-            # elif 0 <= toward_angle < 20:
-            #     movews = 1.0
-            #     movead = 0.5
-
-            # elif 180 < toward_angle <= 270:
-            #     movews = -10.0
-            #     movead = -1.7
-            # elif 270 < toward_angle <= 320:
-            #     movews = 0.1
-            #     movead = -1.2
-            # elif 320 < toward_angle <= 340:
-            #     movews = 0.3
-            #     movead = -0.9
-            # elif 340 < toward_angle <= 360:
-            #     movews = 1.0
-            #     movead = -0.5
 
             if log_data.get("playerSpeed", 0.0) > 5:
                 movews = -0.85
@@ -325,9 +299,9 @@ class Path:
             a_star_pathfinder파일의 AStarPathfinder 객체를 만들어 그 객체에 obstacles를 추가합니다.
             '''
             self.grid = np.zeros((self.map_size, self.map_size), dtype=int)
-            pathfinder = AStarPathfinder(map_width, map_height, grid_size, self.grid)
+            self.pathfinder = AStarPathfinder(map_width, map_height, grid_size, self.grid)
             
-            pathfinder.update_obstacles(self.initial_obstacles,start_world,end_world)
+            self.pathfinder.update_obstacles(self.initial_obstacles,start_world,end_world)
 
 
         except queue.Empty:
@@ -341,7 +315,7 @@ class Path:
                 '''AStarPathfinder의 객체에 있는 find_path를 실행시켜 경로를 만들고
                     simplify_path를 통해 경로를 최적화 시킵니다.                
                 '''
-                raw_path = pathfinder.find_path(start_world, end_world)
+                raw_path = self.pathfinder.find_path(start_world, end_world)
                 simplified_path = self.simplify_path(raw_path, tolerance=7.0)
 
                 self.path = simplified_path
@@ -351,7 +325,7 @@ class Path:
                     '''#####################################
                     ##########경로 시각화 하는 코드입니다#######
                     ########################################'''
-                    # pathfinder.visualize_astar_grid(obstacles=self.initial_obstacles,path=self.path, start_pos=start_world, end_pos=end_world)
+                    # self.pathfinder.visualize_astar_grid(obstacles=self.initial_obstacles,path=self.path, start_pos=start_world, end_pos=end_world)
                 else:
                     print("단순화된 경로 없음.")
             else:

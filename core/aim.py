@@ -7,17 +7,19 @@ class Aim():
         pass
     def reset(self):
         pass
-    def get_aim_action(self, log_data):
+    def get_action(self, log_data, enemy_point=None):
+        if not log_data or not enemy_point:
+            return None
         self.tank_x = log_data.get("playerPos", {}).get("x")
         self.tank_y = log_data.get("playerPos", {}).get("y")
         self.tank_z = log_data.get("playerPos", {}).get("z")
-        self.enemy_x = log_data.get("enemyPos", {}).get("x")
-        self.enemy_y = log_data.get("enemyPos", {}).get("y")
-        self.enemy_z = log_data.get("enemyPos", {}).get("z")
+        # self.enemy_x = log_data.get("enemyPos", {}).get("x")
+        # self.enemy_y = log_data.get("enemyPos", {}).get("y")
+        # self.enemy_z = log_data.get("enemyPos", {}).get("z")
         # 테스트
-        self.enemy_x = 170
-        self.enemy_y = 8.34
-        self.enemy_z = 260
+        self.enemy_x = enemy_point[0]
+        self.enemy_y = enemy_point[1]
+        self.enemy_z = enemy_point[2]
         self.speed = log_data.get("playerSpeed")
         # 포탑 각도
         self.turret_x = log_data.get("playerTurretX")
