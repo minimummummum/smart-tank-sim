@@ -49,9 +49,19 @@ target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
 # target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
 # target_classes = {0: "Car", 1: "Rock", 2: "Wall", 3: "E_Tank", 4: "Human", 5: "Mine"}
 
+<<<<<<< HEAD
+detections = None
+log_data = None
+
+target_classes = {0: "E_Tank", 1: "Car", 2: "Human"}
+# YOLO 모델 백그라운드 프로세스
+def yolo_worker(input_q, output_q):
+    model = YOLO("yolov8l_e500_s512+s416_b16.pt").to("cuda")
+=======
 def yolo_worker(yolo_input_q, yolo_output_q):
     model = YOLO("xmodel_test.pt").to("cuda")
     # YOLO 프로세스 반복
+>>>>>>> e7de9f217a9598ddf48a9b9d2ddbd58f7a973611
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
         image = yolo_input_q.get()

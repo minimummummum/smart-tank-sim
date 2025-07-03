@@ -1,2 +1,4 @@
 yolov8x_e500_s512_b8.pt
 /drop
+yolov8l_e265_s512_b16.pt
+yolov8l_e500_s512+s416_b16.pt
