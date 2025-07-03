@@ -1,6 +1,0 @@
-Episode 1, Steps: 197, Total Reward: 24.40, Avg Reward: 0.12
-Episode 2, Steps: 8, Total Reward: 3.50, Avg Reward: 0.44
-Episode 3, Steps: 5, Total Reward: 2.70, Avg Reward: 0.54
-Episode 4, Steps: 13, Total Reward: 4.50, Avg Reward: 0.35
-Episode 5, Steps: 16, Total Reward: 5.80, Avg Reward: 0.36
-Episode 6, Steps: 78, Total Reward: 9.50, Avg Reward: 0.12

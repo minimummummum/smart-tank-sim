@@ -1,76 +1,155 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Control Map & Gemini Chatbot</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <style>
         body {
             margin: 0;
-            background: #252101;
-            font-family: sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            padding: 20px;
-            /* gap: 30px; */
+            background: #ffffff;
+            font-family: 'Inter', sans-serif; /* Inter 폰트 적용 */
+            display: flex; 
+            justify-content: center; /* 전체 패널을 수평 중앙 정렬 */
+            align-items: flex-start; /* 전체 패널을 상단에 정렬 */
+            padding: 15px;
         }
-        /* 메인 컨트롤 패널 컨테이너: 시뮬레이터 화면 왼쪽에 세로로 배치 */
+        /* 메인 컨트롤 패널 컨테이너 */
         .main-control-panel {
             background-color: #ffffff;
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            width: 450px; /* 고정 너비 설정, 필요에 따라 조절 */
+            padding: 15px;
+            width: min(100%, 340px); /* 화면 너비에 따라 조절되지만 최대 340px */
+            box-sizing: border-box; /* 패딩이 너비에 포함되도록 */
             display: flex;
             flex-direction: column; /* 자식 요소들을 세로로 정렬 */
             gap: 20px; /* 각 섹션 간의 간격 */
+            align-items: center; /* **변경된 부분**: 자식 요소들을 수평 중앙 정렬 */
         }
+        /* 챗봇 컨테이너 */
         .chatbot-container {
             display: flex;
             flex-direction: column;
             width: 300px;
-            height: 80px;
-            background-color: #ffffff; /* 챗봇 배경색 추가 */
-            border-radius: 8px; /* 챗봇 컨테이너 자체의 둥근 모서리 */
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+            height: 150px;
+            background-color: #f8f9fa; /* 챗봇 배경색 추가 */
+            border-radius: 12px; /* 챗봇 컨테이너 자체의 둥근 모서리 */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             padding: 15px; /* 내부 여백 */
+            box-sizing: border-box; /* padding이 너비에 포함되도록 */
+            transition: box-shadow 0.3s ease;
         }
-        /* LiDAR 맵과 버튼을 가로로 묶는 컨테이너 */
+        /* 채팅 메시지 영역 */
+        #chatMessages {
+            display: flex;
+            flex-direction: column; /* 메시지 버블들이 세로로 쌓이도록 */
+            width: 300px; /* 부모 .main-control-panel의 너비를 꽉 채움 */
+            height: 150px; /* 채팅 메시지 영역의 고정 높이 */
+            background-color: #f8f9fa; /* 챗봇 배경색 */
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 15px; /* 내부 여백 */
+            box-sizing: border-box; /* padding이 너비에 포함되도록 */
+            overflow-y: auto; /* 내용이 넘칠 경우 스크롤 */
+            transition: box-shadow 0.3s ease;
+        }
+        /* 메인 그룹: 왼쪽(맵) + 오른쪽(버튼) */
+        /* 수정된 map-buttons-group */
         .map-buttons-group {
             display: flex;
-            align-items: center; /* 세로 중앙 정렬 */
-            gap: 5px; /* 맵과 버튼 사이 간격 */
-            justify-content: center; /* 가운데 정렬 */
-            /* flex-wrap: wrap; 공간 부족시 줄바꿈 */
+            flex-direction: row;
+            width: 300px;
+            height: 140px;
+            background-color: #f8f9fa;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            box-sizing: border-box;
+            gap: 20px;
+            transition: box-shadow 0.3s ease;
         }
-        #lidar_map_canvas { /* LiDAR 맵 */
-            background: white;
-            display: block;
-            width: 100px;
-            height: 100px;
-            border: 1px solid #ccc;
+        .map-buttons-group:hover {
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
         }
-        .action-button-group { /* 작전개시, 발포 버튼 그룹 */
+
+        /* 왼쪽 패널 (LiDAR 맵) */
+        .left-panel {
+            flex: 1;
             display: flex;
-            flex-direction: column; /* 버튼을 세로로 정렬 */
-            gap: 10px; /* 버튼 간 간격 */
+            justify-content: center;
+            align-items: center;
         }
-        #map_container { /* TANK IMPACT 맵 컨테이너 */
+
+        #lidar_map_canvas {
+            width: 110px;
+            height: 110px;
+            background: #f0f0f0;
+            border-radius: 12px;
+            box-shadow: inset 0 0 4px rgba(0,0,0,0.1);
+        }
+
+        /* 오른쪽 패널 (버튼 그룹) */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .action-button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+        }
+
+        /* 버튼 스타일 개선 */
+        .action-button {
+            width: 100%;
+            padding: 12px 0;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(145deg, #034d2d, #022b17);
+            color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transition: all 0.2s ease-in-out;
+        }
+        .action-button:hover {
+            background: linear-gradient(145deg, #055536, #04311c);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+        }
+        .action-button:active {
+            transform: translateY(0);
+            box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+        }
+
+        /* TANK IMPACT 맵 컨테이너 */
+        #map_container { 
             position: relative;
             width: 300px;
             height: 300px;
             margin: 0 auto;
-            border: 1px solid #333;
             overflow: hidden; /* 자식 요소가 container 밖으로 나가는 것 방지 */
             background-color: #eee; /* 배경색 추가 (초기 로딩 시) */
+            border-radius: 12px; /* 둥근 모서리 */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: box-shadow 0.3s ease;
         }
-        #map { /* TANK IMPACT 맵 캔버스 */
+        /* TANK IMPACT 맵 캔버스 */
+        #map { 
             width: 300px;
             height: 300px;
             position: absolute; /* 탱크, 충돌 표시에 필요 */
             top: 0;
             left: 0;
         }
-        #tank, #realimpact{ /* 탱크, 충돌 표시 */
+        /* 탱크, 충돌 표시 */
+        #tank, #realimpact{ 
             position: absolute;
             border-radius: 50%;
             transform-origin: center;
@@ -101,65 +180,47 @@
         .center-text {
             text-align: center;
             margin-bottom: 10px;
+            color: #333; /* 텍스트 색상 */
         }
+        /* 액션 버튼 */
         .action-button {
-            padding: 8px 15px;
-            /* margin: 0 5px; */
-            font-size: 14px;
+            width: 100%; /* 부모(action-button-group) 너비에 맞춰 꽉 채움 */
+            padding: 10px 45px; /* 내부 패딩으로 버튼 크기 조절 */
+            font-size: 12px;
             cursor: pointer;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px; /* 둥근 모서리 */
             background-color: #04341b;
             color: white;
-            transition: background-color 0.3s ease;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+            box-sizing: border-box; /* 패딩이 너비에 포함되도록 */
+            display: flex; /* 텍스트 중앙 정렬 유지 (여러 줄 텍스트 또는 아이콘에 유용) */
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            white-space: nowrap;
         }
         .action-button:hover {
-            background-color: #2d2a08;
+            background-color: #2d2a08; 
+            transform: translateY(-2px);
         }
-        #chatMessages {
-            flex-grow: 1;
-            padding: 10px;
-            overflow-y: auto;
-            background-color: #e9ecef;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border: 1px solid #ddd;
-            width: 300;
-            height: 100px;
-        }
-        /* #userInput {
-            flex-grow: 1;
-            padding: 10px 15px;
-            border: 1px solid #ccc;
-            border-radius: 20px;
-            font-size: 1em;
-            outline: none;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
-        } */
-        #sendButton {
-            padding: 10px 20px;
-            background-color: #04341b;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 1em;
-            transition: background-color 0.3s ease;
-        }
-        #sendButton:hover {
-            background-color: #24fa36;
+        .action-button:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         }
         .message-bubble {
-            max-width: 80%;
-            padding: 10px 15px;
-            border-radius: 18px;
+            max-width: 90%;
+            padding: 12px 18px;
+            border-radius: 20px;
             margin-bottom: 10px;
             word-wrap: break-word;
-            line-height: 1.4;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            line-height: 1.5;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
         }
         .user-message {
             background-color: #dcf8c6;
+            border: 1px solid #e0e0e0;
             align-self: flex-end;
             margin-left: auto;
             border-bottom-right-radius: 5px;
@@ -173,12 +234,14 @@
         }
         #chatMessages > div {
             display: flex;
+            flex-direction: column;
+            align-items: flex-start;
         }
         #goal_flag {
             position: absolute;
             width: 24px; /* 깃발 이미지 크기에 맞춰 조절 */
             height: 24px;
-            background-image: url('/static/flag_icon.png'); /* 깃발 이미지 경로 */
+            background-image: url('/static/destination_icon.png'); /* 깃발 이미지 경로 */
             background-size: contain;
             background-repeat: no-repeat;
             transform: translate(-50%, -100%); /* 깃발 아랫부분이 좌표에 오도록 조정 */
@@ -190,16 +253,21 @@
 <body>
     <div class="main-control-panel">
         <h2 class="center-text">SMART CONTROL PANEL</h2>
-
-        <!-- <div class="chatbot-container"> -->
+ 
         <div id="chatMessages"></div>
-        <!-- </div> -->
+
         <div class="map-buttons-group">
-            <canvas id="lidar_map_canvas" width="100" height="100"></canvas>
-            <div class="action-button-group">
-                <button class="action-button" onclick="sendAction('snipe')">작전개시</button>
-                <button class="action-button" onclick="sendAction('snipe')">발포</button>
+            <div class="left-panel">
+                <canvas id="lidar_map_canvas" width="100" height="100"></canvas>
             </div>
+            <div class="right-panel">
+                <div class="action-button-group">
+                    <button class="action-button" onclick="startLLMCommand()">작전개시</button>
+                    <button class="action-button" onclick="sendAction('snipe')">발포</button>
+                    <!-- <button class="action-button" onclick="sendAction('fire')">발포</button> -->
+                </div>
+            </div>
+            
         </div>
         <div id="map_container">
             <canvas id="map" width="300" height="300"></canvas>
@@ -214,7 +282,6 @@
         const API_BASE_URL = "http://127.0.0.1:5036";
 
         const canvas = document.getElementById('lidar_map_canvas');
-        
         const ctx = canvas.getContext('2d');
         const mapCanvas = document.getElementById('map');
         const mapCtx = mapCanvas.getContext('2d');
@@ -336,7 +403,6 @@
             ctx.beginPath();
             ctx.arc(meCanvas.x, meCanvas.y, 3, 0, 2 * Math.PI);
             ctx.fill();
-            ctx.fillText('Me', meCanvas.x + 5, meCanvas.y - 2);
             // 부채꼴
             drawFan(playerpos, playerLidarAngleZ);
         }
@@ -403,22 +469,23 @@
                     const real_impact_z = data.real_impact_z;
                     const bot_command = data.bot_command
                     const user_command = data.user_command
-                    if (user_command !== user_prevCommand) {
-                        addMessageToChat('User', `${user_command}`);
-                    }
-                    user_prevCommand = user_command;
                     if (bot_command !== bot_prevCommand) {
                         addMessageToChat('Bot', `${bot_command}`);
                     }
                     bot_prevCommand = bot_command;
-                    
+                    if (user_command !== user_prevCommand) {
+                        addMessageToChat('User', `${user_command}`);
+                    }
+                    user_prevCommand = user_command;
                     // 탱크 위치
-                    const mapX = x;
-                    const mapY = mapSize - z;
-                    tank.style.left = `${mapX}px`;
-                    tank.style.top = `${mapY}px`;
-                    tank.style.transform = `rotate(${yaw}deg)`;
-                    
+                    // const mapX = x;
+                    // const mapY = mapSize - z;
+                    // tank.style.left = `${mapX}px`;
+                    // tank.style.top = `${mapY}px`;
+                    // tank.style.transform = `rotate(${yaw}deg)`;
+                    const tankCanvasPos = impactWorldToCanvas(x, z);
+                    tank.style.left = `${tankCanvasPos.x}px`;
+                    tank.style.top = `${tankCanvasPos.y}px`;
                     // 목적지 깃발
                     const goal_x = data.goal_x;
                     const goal_z = data.goal_z;
@@ -431,7 +498,6 @@
                     } else {
                         goalFlag.style.display = 'none'; // 목표 지점이 없으면 깃발 숨김
                     }
-
                     // path
                     if (data.path && Array.isArray(data.path) && data.path.length > 1) {
                         mapCtx.beginPath();
@@ -455,8 +521,6 @@
                         // mapCtx.fillStyle = 'red';
                         // mapCtx.fill();
                     }
-
-
                     // 착탄 위치
                     if (impact_x !== null && impact_z !== null) {
                         const impactX = impact_x;
@@ -493,24 +557,86 @@
         }
         setInterval(update, 300);
 
-        async function sendAction(action) {
+        // '작전개시' 버튼 클릭 시 호출될 함수 ///////////////////////////////////////////////////////
+        async function startLLMCommand() {
             try {
-                const response = await fetch(`${API_BASE_URL}/send_action`, {
+                // LLM 시작을 위한 Flask 엔드포인트로 POST 요청
+                const response = await fetch(`${API_BASE_URL}/start_llm_operation`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: action })
+                    body: JSON.stringify({ command: 'start_llm' }) // LLM 시작 명령 전달
                 });
+
                 const result = await response.json();
-                console.log('Action sent:', result);
-                if (result.status === "success") {
-                    addMessageToChat('Bot', `"${action}" 명령: ${result.gemini_response}`);
-                    updateTank();
+                console.log('LLM Start Response:', result);
+
+                if (response.ok) { // HTTP 상태 코드가 200번대인지 확인
+                    // Flask에서 성공 응답을 받으면, chat_history를 새로고침하여
+                    // 서버에 추가된 시나리오와 LLM의 첫 명령을 가져와 표시합니다.
+                    await fetchChatHistory(); 
+
+                    // 선택적으로, Flask에서 보낸 마지막 응답 메시지를 추가할 수 있습니다.
+                    // 예를 들어, "시뮬레이션 시작 및 LLM에 시나리오 전송 완료" 같은 메시지
+                    // addMessageToChat('Bot', `LLM 응답: ${result.message}`); 
+
+                    // 필요한 경우 추가적인 UI 업데이트 또는 기능 호출
+                    // 예: updateTank();
                 } else {
-                    addMessageToChat('Bot', `"${action}" 명령 실패: ${result.message}`);
+                    // 서버에서 오류 응답 (예: 400, 500)을 보낸 경우
+                    addMessageToChat('Bot', `LLM 시작 명령 실패: ${result.message || '알 수 없는 오류'}`);
                 }
             } catch (error) {
-                console.error('Error sending action:', error);
-                addMessageToChat('Bot', '액션 전송 중 오류가 발생했습니다.');
+                console.error('LLM 시작 명령 전송 중 오류:', error);
+                addMessageToChat('Bot', 'LLM 시작 명령 전송 중 네트워크 오류가 발생했습니다.');
+            }
+        }
+        // ////////////////////////////////////////////////////////////////////////////////////////
+        // async function sendAction(action) {
+        //     try {
+        //         const response = await fetch(`${API_BASE_URL}/send_action`, {
+        //             method: 'POST',
+        //             headers: { 'Content-Type': 'application/json' },
+        //             body: JSON.stringify({ action: action })
+        //         });
+        //         const result = await response.json();
+        //         console.log('Action sent:', result);
+        //         if (result.status === "success") {
+        //             addMessageToChat('Bot', `"${action}" 명령: ${result.gemini_response}`);
+        //             updateTank();
+        //         } else {
+        //             addMessageToChat('Bot', `"${action}" 명령 실패: ${result.message}`);
+        //         }
+        //     } catch (error) {
+        //         console.error('Error sending action:', error);
+        //         addMessageToChat('Bot', '액션 전송 중 오류가 발생했습니다.');
+        //     }
+        // }
+        async function sendAction(actionType) {
+            if (actionType === 'snipe') { // '발포' button
+                console.log("발포 버튼 클릭: 서버에 격파 승인 요청");
+                try {
+                    const response = await fetch(`${API_BASE_URL}/confirm_fire`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        // No specific body needed for /confirm_fire as it relies on server-side state
+                        body: JSON.stringify({}) // Send an empty JSON object
+                    });
+                    const result = await response.json();
+                    console.log('격파 승인 응답:', result);
+
+                    if (response.ok) { // Check for HTTP success status (200-299)
+                        // Flask's /confirm_fire already adds messages to chat_history.
+                        // We just need to fetch the updated history to display them.
+                        await fetchChatHistory(); 
+                    } else {
+                        addMessageToChat('Bot', `발포 명령 실패: ${result.message || '알 수 없는 오류'}`);
+                    }
+                } catch (error) {
+                    console.error('발포 승인 요청 중 오류 발생:', error);
+                    addMessageToChat('Bot', '발포 요청 중 네트워크 오류가 발생했습니다.');
+                }
             }
         }
 
