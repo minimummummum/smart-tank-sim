@@ -57,14 +57,6 @@ tank_status_data = {
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
 
-######
-pending_fire_action = False
-pending_fire_target_pos = None # 발포 후 이동할 목표 위치 (LLM이 제공한 원래 목표)
-# 초기 시나리오가 LLM에 전달되었는지 확인하는 플래그
-is_initial_scenario_processed = False
-######
-
-
 yolo_input_queue = Queue(maxsize=1)
 yolo_output_queue = Queue(maxsize=1)
 action_input_queue = Queue(maxsize=1)
@@ -143,38 +135,6 @@ def start_llm_operation():
     except Exception as e:
         print(f"LLM에 시나리오 전송 중 오류: {e}")
         return jsonify(status="error", message=f"작전개시 중 오류 발생: {e}"), 500
-    
-# --- 사용자가 '격파' 버튼을 눌렀을 때 처리 ---
-@app.route('/confirm_fire', methods=['POST'])
-def confirm_fire():
-    """
-    사용자가 '발포' 버튼을 눌러 LLM의 발포 제안을 승인할 때 호출됩니다.
-    """
-    global pending_fire_action, pending_fire_target_pos
-    
-    if pending_fire_action and pending_fire_target_pos is not None:
-        fire_pos = pending_fire_target_pos
-        
-        # 상태 초기화
-        pending_fire_action = False
-        pending_fire_target_pos = None
-        
-        # llm_input_queue에 실제 발포 및 이동 명령 추가
-        # action_worker는 (pos, True)를 받으면 발포 후 pos로 이동합니다.
-        llm_input_queue.put((fire_pos, True)) 
-        
-        command_message = f"사용자가 격파 명령을 승인했습니다. 발포 후 {fire_pos[0]},{fire_pos[1]}로 이동합니다."
-        print(f"User confirmed fire: {command_message}")
-        chat_history.append(("User", "발포 명령 승인.")) # 사용자가 발포 버튼 눌렀다는 메시지
-        chat_history.append(("Bot", command_message)) # 봇이 명령을 실행한다는 메시지
-        
-        tank_status_data.update({"bot_command": command_message})
-        
-        return jsonify(status="success", message=command_message)
-    else:
-        message = "현재 대기 중인 발포 명령이 없습니다."
-        print(message)
-        return jsonify(status="error", message=message), 400
 ###########################################################################################################
 
 def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
@@ -504,15 +464,12 @@ def calculate_impact_point_on_ground(x, y, z, yaw_deg, pitch_deg, gravity=9.81):
 #     impact_z = z + v0z * t_impact
 #     return (impact_x, impact_z)
 
-# GOOGLE_API_KEY = "AIzaSyAG6S4DQtZlHbIxBQsHp9Ab_Bek7SPMSgY"  # 여기에 Gemini API 키 입력
-GOOGLE_API_KEY = "AIzaSyA_tLjPjmMmQWW28K9XQiSNiAdcRGEHPhY"
+GOOGLE_API_KEY = "AIzaSyAG6S4DQtZlHbIxBQsHp9Ab_Bek7SPMSgY"  # 여기에 Gemini API 키 입력
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 chat = model.start_chat(history=[])
 @app.route('/info', methods=['POST'])
 def info():
-    global is_initial_scenario_processed, pending_fire_action, pending_fire_target_pos #@@@@
-    
     llm_input_data = None
     try:
         llm_input_data = llm_output_queue.get_nowait()
@@ -536,22 +493,12 @@ def info():
             fire = True if fire_str == 'True' else False
             print("pos:", pos)
             print("fire:", fire)
-            # llm_input_queue.put((pos, fire)) @@@@
+            llm_input_queue.put((pos, fire))
             command = None
 
             if fire:
-                ######
-                pending_fire_action = True
-                pending_fire_target_pos = pos
-                command = "발포 대기 중. 발포 버튼을 눌러주세요."
-                print(f"LLM Agent: 발포 승인 대기 중. {command}")
-                ######
-                # command = f"적 격파 후 {pos}로 이동하라"
+                command = f"적 격파 후 {pos}로 이동하라"
             else:
-                ######
-                # 발포가 False일 경우, 즉시 이동 명령 실행
-                llm_input_queue.put((pos, fire))
-                ######
                 command = f"{pos}로 이동하라"
             tank_status_data.update({
             "bot_command":command
@@ -560,7 +507,7 @@ def info():
             bot_response = f"Gemini API 오류: {str(e)}"
         print(f"LLM Agent: {bot_response}")
         chat_history.append(("User", user_message))
-        # chat_history.append(("Bot", bot_response))
+        chat_history.append(("Bot", bot_response))
     
 
     data = request.get_json(force=True)
@@ -687,9 +634,9 @@ def collision():
 def init():
     config = {
         "startMode": "start",
-        "blStartX": 10,
-        "blStartY": 20,
-        "blStartZ": 10,
+        "blStartX": 5,
+        "blStartY": 10,
+        "blStartZ": 295,
         "rdStartX": 180,
         "rdStartY": -10,
         "rdStartZ": 60,
@@ -745,4 +692,4 @@ if __name__ == '__main__':
                                                       ))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5038, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5036, threaded=True, debug=False)

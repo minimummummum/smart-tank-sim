@@ -57,14 +57,6 @@ tank_status_data = {
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
 
-######
-pending_fire_action = False
-pending_fire_target_pos = None # 발포 후 이동할 목표 위치 (LLM이 제공한 원래 목표)
-# 초기 시나리오가 LLM에 전달되었는지 확인하는 플래그
-is_initial_scenario_processed = False
-######
-
-
 yolo_input_queue = Queue(maxsize=1)
 yolo_output_queue = Queue(maxsize=1)
 action_input_queue = Queue(maxsize=1)
@@ -93,89 +85,6 @@ def yolo_worker(yolo_input_q, yolo_output_q):
         # YOLO 결과를 yolo_output_q에 넣어 /detect로 response
         yolo_output_q.put(detections)
 
-########### --- "작전개시" 버튼을 위한 LLM 시작 및 시나리오 전송 엔드포인트 --- ###########
-@app.route('/start_llm_operation', methods=['POST'])
-def start_llm_operation():
-    """
-    작전개시 버튼 클릭 시 시뮬레이션 시나리오를 채팅창에 표시하고,
-    LLM에 시나리오를 전송하여 자율주행을 시작하게 하는 엔드포인트.
-    """
-    print("LLM 시작 명령 수신: '작전개시'")
-
-    # 1. 시나리오를 즉시 채팅 기록에 추가하여 웹 UI에 표시 (Bot 메시지처럼 보이도록)
-    chat_history.clear() # 기존 채팅 기록을 지우고 새로운 시나리오로 시작
-    chat_history.append(("Bot", SCENARIO))
-
-    # 2. LLM에 SCENARIO를 전송하여 LLM이 이를 기반으로 첫 번째 자율주행 명령을 생성하도록 지시
-    print(f"LLM에 시나리오 전송 및 초기 자율주행 명령 요청:\n{SCENARIO}")
-
-    try:
-        # LLM에게 SCENARIO를 보내고, LLM은 시나리오에 따라 첫 번째 행동을 추론하여 응답할 것입니다.
-        llm_response_for_scenario = chat.send_message(SCENARIO)
-        autonomous_command_text = llm_response_for_scenario.text
-
-        print(f"LLM의 첫 번째 자율주행 명령: {autonomous_command_text}")
-
-        # 3. LLM으로부터 받은 자율주행 관련 응답을 파싱하여 큐에 넣어 action_worker가 처리하도록 함
-        try:
-            pos_start = autonomous_command_text.find('[') + 1
-            pos_end = autonomous_command_text.find(']')
-            pos_str = autonomous_command_text[pos_start:pos_end]
-            pos = [int(x.strip()) for x in pos_str.split(',')]
-            fire_start = autonomous_command_text.find('fire:') + len('fire:')
-            fire_str = autonomous_command_text[fire_start:].split('}')[0].strip()
-            fire = True if fire_str == 'True' else False
-
-            llm_input_queue.put((pos, fire)) # action_worker가 읽을 큐에 자율주행 명령 추가
-            print(f"첫 번째 자율주행 명령 ({pos}, {fire})를 LLM Agent 큐에 추가했습니다.")
-
-            # LLM이 생성한 첫 번째 자율주행 명령도 채팅 기록에 추가
-            chat_history.append(("Bot", f"작전을 수행합니다. {pos}로 이동하라"))
-
-        except Exception as parse_error:
-            print(f"LLM의 첫 명령 파싱 오류: {parse_error}. 원본 LLM 응답: {autonomous_command_text}")
-            chat_history.append(("Bot", f"LLM 첫 명령 파싱 중 오류 발생: {autonomous_command_text}"))
-            return jsonify(status="error", message=f"LLM 첫 명령 파싱 중 오류 발생: {parse_error}"), 500
-
-        # 4. 클라이언트에 성공 응답 반환
-        return jsonify(status="success", message="시뮬레이션 시작 및 LLM에 시나리오 전송 완료")
-
-    except Exception as e:
-        print(f"LLM에 시나리오 전송 중 오류: {e}")
-        return jsonify(status="error", message=f"작전개시 중 오류 발생: {e}"), 500
-    
-# --- 사용자가 '격파' 버튼을 눌렀을 때 처리 ---
-@app.route('/confirm_fire', methods=['POST'])
-def confirm_fire():
-    """
-    사용자가 '발포' 버튼을 눌러 LLM의 발포 제안을 승인할 때 호출됩니다.
-    """
-    global pending_fire_action, pending_fire_target_pos
-    
-    if pending_fire_action and pending_fire_target_pos is not None:
-        fire_pos = pending_fire_target_pos
-        
-        # 상태 초기화
-        pending_fire_action = False
-        pending_fire_target_pos = None
-        
-        # llm_input_queue에 실제 발포 및 이동 명령 추가
-        # action_worker는 (pos, True)를 받으면 발포 후 pos로 이동합니다.
-        llm_input_queue.put((fire_pos, True)) 
-        
-        command_message = f"사용자가 격파 명령을 승인했습니다. 발포 후 {fire_pos[0]},{fire_pos[1]}로 이동합니다."
-        print(f"User confirmed fire: {command_message}")
-        chat_history.append(("User", "발포 명령 승인.")) # 사용자가 발포 버튼 눌렀다는 메시지
-        chat_history.append(("Bot", command_message)) # 봇이 명령을 실행한다는 메시지
-        
-        tank_status_data.update({"bot_command": command_message})
-        
-        return jsonify(status="success", message=command_message)
-    else:
-        message = "현재 대기 중인 발포 명령이 없습니다."
-        print(message)
-        return jsonify(status="error", message=message), 400
-###########################################################################################################
 
 def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                   info_input_q, info_output_q, init_input_q, collision_input_q, 
@@ -198,7 +107,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     tank_cnt_list = deque([0]*5, maxlen=5)
     car_cnt_list = deque([0]*5, maxlen=5)
     human_cnt_list = deque([0]*5, maxlen=5)
-    # llm_output_q.put(SCENARIO) => 수정
+    llm_output_q.put(SCENARIO)
     while True:
         try:
             init_data = init_input_q.get_nowait()
@@ -504,15 +413,12 @@ def calculate_impact_point_on_ground(x, y, z, yaw_deg, pitch_deg, gravity=9.81):
 #     impact_z = z + v0z * t_impact
 #     return (impact_x, impact_z)
 
-# GOOGLE_API_KEY = "AIzaSyAG6S4DQtZlHbIxBQsHp9Ab_Bek7SPMSgY"  # 여기에 Gemini API 키 입력
-GOOGLE_API_KEY = "AIzaSyA_tLjPjmMmQWW28K9XQiSNiAdcRGEHPhY"
+GOOGLE_API_KEY = "AIzaSyAG6S4DQtZlHbIxBQsHp9Ab_Bek7SPMSgY"  # 여기에 Gemini API 키 입력
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 chat = model.start_chat(history=[])
 @app.route('/info', methods=['POST'])
 def info():
-    global is_initial_scenario_processed, pending_fire_action, pending_fire_target_pos #@@@@
-    
     llm_input_data = None
     try:
         llm_input_data = llm_output_queue.get_nowait()
@@ -536,22 +442,11 @@ def info():
             fire = True if fire_str == 'True' else False
             print("pos:", pos)
             print("fire:", fire)
-            # llm_input_queue.put((pos, fire)) @@@@
+            llm_input_queue.put((pos, fire))
             command = None
-
             if fire:
-                ######
-                pending_fire_action = True
-                pending_fire_target_pos = pos
-                command = "발포 대기 중. 발포 버튼을 눌러주세요."
-                print(f"LLM Agent: 발포 승인 대기 중. {command}")
-                ######
-                # command = f"적 격파 후 {pos}로 이동하라"
+                command = f"적 격파 후 {pos}로 이동하라"
             else:
-                ######
-                # 발포가 False일 경우, 즉시 이동 명령 실행
-                llm_input_queue.put((pos, fire))
-                ######
                 command = f"{pos}로 이동하라"
             tank_status_data.update({
             "bot_command":command
@@ -560,7 +455,7 @@ def info():
             bot_response = f"Gemini API 오류: {str(e)}"
         print(f"LLM Agent: {bot_response}")
         chat_history.append(("User", user_message))
-        # chat_history.append(("Bot", bot_response))
+        chat_history.append(("Bot", bot_response))
     
 
     data = request.get_json(force=True)
@@ -642,7 +537,7 @@ def update_bullet():
 
 @app.route('/minimap')
 def minimap():
-    return render_template("index.html")
+    return render_template("index_0630.html")
 
 @app.route('/set_destination', methods=['POST'])
 def set_destination():
@@ -687,9 +582,9 @@ def collision():
 def init():
     config = {
         "startMode": "start",
-        "blStartX": 10,
-        "blStartY": 20,
-        "blStartZ": 10,
+        "blStartX": 5,
+        "blStartY": 10,
+        "blStartZ": 295,
         "rdStartX": 180,
         "rdStartY": -10,
         "rdStartZ": 60,
@@ -745,4 +640,4 @@ if __name__ == '__main__':
                                                       ))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5038, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5036, threaded=True, debug=False)
