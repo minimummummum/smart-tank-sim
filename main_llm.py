@@ -7,7 +7,7 @@ import numpy as np
 from io import BytesIO
 import logging
 import queue
-from utils import clear_queue
+from core.utils import clear_queue
 import time
 import math
 import google.generativeai as genai
@@ -20,7 +20,7 @@ SCENARIO = """
 가장 적절한 다음 행동을 추론하여 제시하는 것입니다.
 **규칙:**
 1. **맵 사이즈:** 300x300 (좌표 범위: 0부터 299까지)
-2. **시작 좌표:** (5,295)
+2. **시작 좌표:** (8, 290)
 3. **답변 형식:** 오직 다음 이동할 좌표와 사격 여부를 알려주면 됩니다. 형식은 pos:[100,100], fire:False 이며, fire는 적 인식 보고가 들어 왔을 때 가능하며, 사거리는 100이내 일 때 가능합니다.
 4. **언어:** 답변은 한글로만 합니다.
 5. **추론:** 당신 스스로 상황을 분석하고 최적의 좌표(이동할 최종 좌표)와 사격 여부를 선정해야 합니다.
@@ -28,12 +28,13 @@ SCENARIO = """
 7. **보고:** 적탱크/자동차/사람 좌표와 몇대인지 주어집니다. 
 적 탱크 발견 시 한 대일 경우 사격하고, 여러대일 경우 회피하세요.
 사격할 때의 이동 좌표는 원래 최종 목적지로 주세요.
-만약 회피할 경우, 좌표를 후퇴 좌표로 주지 말고 우회 좌표로 주세요.
+만약 회피할 경우, 좌표를 후퇴 좌표로 주지 말고 크게 우회하는 좌표로 주세요.
 자동차나 사람을 발견하면 거기 근처로 근접해서 정찰하세요.
 이제 시뮬레이션을 시작합니다.
 시나리오 시작
-(280, 280)으로 이동해서 보급을 받고, 다시 복귀하라
+(202, 56)으로 이동해서 보급을 받고, 다시 복귀하라
 """
+
 app = Flask(__name__)
 CORS(app)
 lidar_data = []
@@ -52,7 +53,8 @@ tank_status_data = {
     "goal_x":None,
     "goal_z":None,
     "bot_command":None,
-    "user_command":None
+    "user_command":None,
+    "path":[]
 }
 obstacle_data = {}
 chat_history = []  # 채팅 기록 저장 리스트
@@ -63,7 +65,6 @@ pending_fire_target_pos = None # 발포 후 이동할 목표 위치 (LLM이 제�
 # 초기 시나리오가 LLM에 전달되었는지 확인하는 플래그
 is_initial_scenario_processed = False
 ######
-
 
 yolo_input_queue = Queue(maxsize=1)
 yolo_output_queue = Queue(maxsize=1)
@@ -83,7 +84,8 @@ target_point_queue = Queue(maxsize=1)
 # target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
 target_classes = {1: "Car", 0: "E_Tank", 2: "Human"}
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("yolov8x_e500_s512_b8.pt").to("cuda")
+    #model = YOLO("yolov8x_e500_s512_b8.pt").to("cuda")
+    model = YOLO("yolom_e1000_i640_b8_es100.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
@@ -198,7 +200,13 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
     tank_cnt_list = deque([0]*5, maxlen=5)
     car_cnt_list = deque([0]*5, maxlen=5)
     human_cnt_list = deque([0]*5, maxlen=5)
-    # llm_output_q.put(SCENARIO) => 수정
+    # llm_output_q.put(SCENARIO)
+    path = []
+    supply_point = (202, 56)
+    base_point = (8, 290)
+    enemy_point = (235.81, 6.60, 290.74)
+    enemys_point = (146, 160)
+    cars_point = (252, 265)
     while True:
         try:
             init_data = init_input_q.get_nowait()
@@ -221,6 +229,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             tank_cnt_list = deque([0]*5, maxlen=5)
             car_cnt_list = deque([0]*5, maxlen=5)
             human_cnt_list = deque([0]*5, maxlen=5)
+            path = []
             info_output_q.put({"status": "success", "control": ""})
             continue
 
@@ -282,31 +291,37 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             llm_pos, llm_fire = llm_request
             llm_request = None
             target_point = llm_pos
-            if target_point:
-                target_point_q.put(target_point)
             print(f"Action worker received new LLM target: {target_point}")
             speed_flag = False
             # aim_flag = False
             stop_flag = False
             clear_queue(detect_input_q)
+        if target_point:
+                tmp_path = astar.path
+                if len(tmp_path) > 1:
+                    if path == tmp_path:
+                        target_point_q.put({"target_point":target_point})
+                    else:
+                        path = tmp_path
+                        target_point_q.put({"target_point":target_point, "path":path})
         tank_pos = (int(log_data.get("playerPos", {}).get("x")), int(log_data.get("playerPos", {}).get("z")))
         if target_point:
             actions = astar.get_action(log_data, target_point)
             distance = np.hypot(target_point[0] - tank_pos[0], target_point[1] - tank_pos[1])
 
-            if distance < 5 and not goal_flag and not llm_report_flag:
+            if distance < 6 and not goal_flag and not llm_report_flag:
                 goal_flag = True
                 llm_report_flag = True
             if distance > 10 and goal_flag and not llm_report_flag:
                 goal_flag = False
                 llm_report_flag = True
-            if distance < 5 and not turret_align_flag and not aim_flag and llm_report_flag:# and not goal_flag:
+            if distance < 6 and not turret_align_flag and not aim_flag and llm_report_flag:# and not goal_flag:
                 llm_output_q.put(f"{target_point}에 도착했습니다.")
                 goal_flag = True
                 llm_report_flag = False
             
         if actions is None:
-            continue
+            actions = [0.0, 0.0]
         
         
         # 탱크 개인인지 군집인지 체크
@@ -317,7 +332,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         try:
             detections = detect_input_q.get_nowait()
         except queue.Empty:
-            detections = None
+            pass
         if detections:
             for box in detections:
                 class_id = int(box[5])
@@ -343,22 +358,23 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                     if tank_cnt_mode == tank_cnt_max and llm_report_flag:
                         if tank_cnt_mode > 1:
                             stop_flag = True
-                            print(tank_cnt_mode, "탱크 발견 수")
                             aim_flag = False
+                            print(tank_cnt_mode, "탱크 발견 수")
+                            llm_output_q.put(f'{target_point}로 가던 도중 {tank_pos}까지 왔는데, {enemys_point}에 적 탱크 여러 대 발견! 조준 완료. 격파 여부 대기')
                         else:
-                            aim_flag = True
                             speed_flag = True
                             stop_flag = True
                             # 적 탱크 1대 or 여러대 발견으로 수정
-                        tank_cnt_mode = 1 if tank_cnt_mode == 1 else "여러"
-                        llm_output_q.put(f'{target_point}로 가던 도중 {tank_pos}까지 왔는데, 적 탱크 {tank_cnt_mode}대 발견! 조준 완료. 격파 여부 대기')
+                            aim_flag = True
+                            llm_output_q.put(f'{target_point}로 가던 도중 {tank_pos}까지 왔는데, 적 탱크 1 대 발견! 조준 완료. 격파 여부 대기')
+                        
                         llm_report_flag = False
                         
             elif sum(car_cnt_list) >= 3 and llm_report_flag and car_flag: # Car 보고
                 # llm_report_flag = False 
                 car_flag = False
-                stop_flag = True
-                llm_output_q.put(f'현재 좌표: {tank_pos}, (137, 100) 에서 차 발견')
+                stop_flag = True    
+                llm_output_q.put(f'현재 좌표: {tank_pos}, (252, 265) 에서 차 발견')
             elif sum(human_cnt_list) >= 3 and llm_report_flag: # Human 보고 > llm에서 명령이 떨어지면 이동 
                 llm_report_flag = False
                 print(f"사람 발견! 명령 대기") # 팝업 창
@@ -389,7 +405,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         
         t_actions = None
         if aim_flag:
-            t_actions = aim_bot.get_action(log_data)
+            t_actions = aim_bot.get_action(log_data, enemy_point)
+
         if t_actions:
             if llm_fire == t_actions[2] == True:
                 fire = True
@@ -398,8 +415,8 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
             action = {
                 "moveWS": {"command": movews, "weight": abs(actions[0])},
                 "moveAD": {"command": "A" if actions[1] > 0 else "D", "weight": abs(actions[1])},
-                "turretQE": {"command": "Q" if t_actions[0] > 0 else "E", "weight": abs(t_actions[0])},
-                "turretRF": {"command": "R" if t_actions[1] > 0 else "F", "weight": abs(t_actions[1])},
+                "turretQE": {"command": "Q" if t_actions[0] > 0 else "E", "weight": abs(t_actions[0]) * 0.9},
+                "turretRF": {"command": "R" if t_actions[1] > 0 else "F", "weight": abs(t_actions[1]) * 0.9},
                 "fire": fire
             }
         else:
@@ -419,7 +436,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
                     "moveAD": {"command": "A" if actions[1] > 0 else "D", "weight": abs(actions[1])},
                     "turretQE": {"command": "Q" if t_actions[0] > 0 else "E", "weight": abs(t_actions[0])},
                     "turretRF": {"command": "R" if t_actions[1] > 0 else "F", "weight": abs(t_actions[1])},
-                    "fire": fire
+                    "fire": ""
                 }
         action_output_q.put(action)
         info_output_q.put({"status": "success", "control": ""})
@@ -437,17 +454,17 @@ def detect():
         return jsonify({})
     detect_input_queue.put(detections)
     filtered_results = []
-    for box in detections:
-        class_id = int(box[5])
-        if class_id in target_classes and box[4] > 0.8:
-            filtered_results.append({
-                'className': target_classes[class_id],
-                'bbox': [float(coord) for coord in box[:4]],
-                'confidence': float(box[4]),
-                'color': '#00FF00',
-                'filled': False,
-                'updateBoxWhileMoving': False
-            })
+    # for box in detections:
+    #     class_id = int(box[5])
+    #     if class_id in target_classes and box[4] > 0.8:
+    #         filtered_results.append({
+    #             'className': target_classes[class_id],
+    #             'bbox': [float(coord) for coord in box[:4]],
+    #             'confidence': float(box[4]),
+    #             'color': '#00FF00',
+    #             'filled': False,
+    #             'updateBoxWhileMoving': False
+    #         })
     return jsonify(filtered_results)
 
 @app.route('/tank_status', methods=['GET'])
@@ -487,32 +504,16 @@ def calculate_impact_point_on_ground(x, y, z, yaw_deg, pitch_deg, gravity=9.81):
     impact_z = z + turret_offset * math.cos(yaw) + distance * math.cos(yaw)
     
     return (impact_x, impact_z)
-# def calculate_impact_point_on_ground(x, z, yaw_deg, pitch_deg, gravity=9.81):
-#     initial_speed = 60
-#     yaw = math.radians(yaw_deg)
-#     pitch = math.radians(pitch_deg)
-#     dx = math.cos(pitch) * math.sin(yaw)
-#     dy = math.sin(pitch)
-#     dz = math.cos(pitch) * math.cos(yaw)
-#     v0x = initial_speed * dx
-#     v0y = initial_speed * dy
-#     v0z = initial_speed * dz
-#     if v0y <= 0:
-#         return (x, 0, z)
-#     t_impact = 2 * v0y / gravity
-#     impact_x = x + v0x * t_impact
-#     impact_z = z + v0z * t_impact
-#     return (impact_x, impact_z)
-
-# GOOGLE_API_KEY = "AIzaSyAG6S4DQtZlHbIxBQsHp9Ab_Bek7SPMSgY"  # 여기에 Gemini API 키 입력
-GOOGLE_API_KEY = "AIzaSyA_tLjPjmMmQWW28K9XQiSNiAdcRGEHPhY"
+# AIzaSyAG6S4DQtZlHbIxBQsHp9Ab_Bek7SPMSgY
+# AIzaSyA_tLjPjmMmQWW28K9XQiSNiAdcRGEHPhY
+# AIzaSyBZdSdpBCtkL59kbnIWqlxFfmzebwt3dYM
+GOOGLE_API_KEY = "AIzaSyA_tLjPjmMmQWW28K9XQiSNiAdcRGEHPhY"  # 여기에 Gemini API 키 입력
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 chat = model.start_chat(history=[])
 @app.route('/info', methods=['POST'])
 def info():
     global is_initial_scenario_processed, pending_fire_action, pending_fire_target_pos #@@@@
-    
     llm_input_data = None
     try:
         llm_input_data = llm_output_queue.get_nowait()
@@ -536,7 +537,7 @@ def info():
             fire = True if fire_str == 'True' else False
             print("pos:", pos)
             print("fire:", fire)
-            # llm_input_queue.put((pos, fire)) @@@@
+            # llm_input_queue.put((pos, fire))
             command = None
 
             if fire:
@@ -580,11 +581,16 @@ def info():
         target_point = None
     target_x, target_z = None, None
     if target_point:
-        target_x, target_z = target_point
-        tank_status_data.update({
-            "goal_x":target_x,
-            "goal_z":target_z
-        })
+        if "target_point" in target_point:
+            target_x, target_z = target_point["target_point"]
+            tank_status_data.update({
+                "goal_x":target_x,
+                "goal_z":target_z
+            })
+        if "path" in target_point:
+            tank_status_data.update({
+                "path":target_point["path"]
+            })
     tank_status_data.update({
         "x": x,
         "z": z,
@@ -687,9 +693,9 @@ def collision():
 def init():
     config = {
         "startMode": "start",
-        "blStartX": 10,
-        "blStartY": 20,
-        "blStartZ": 10,
+        "blStartX": 8,
+        "blStartY": 10,
+        "blStartZ": 290,
         "rdStartX": 180,
         "rdStartY": -10,
         "rdStartZ": 60,

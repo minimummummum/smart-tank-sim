@@ -1,4 +1,5 @@
+yolom_e1000_i640_b8_es100.pt
 yolov8x_e500_s512_b8.pt
 /drop
-yolov8l_e265_s512_b16.pt
-yolov8l_e500_s512+s416_b16.pt
+/__pycache__
+/core/__pycache__

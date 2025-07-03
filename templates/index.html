@@ -34,11 +34,12 @@
             flex-direction: column;
             width: 300px;
             height: 150px;
-            background-color: #ffffff; /* 챗봇 배경색 추가 */
-            border-radius: 8px; /* 챗봇 컨테이너 자체의 둥근 모서리 */
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+            background-color: #f8f9fa; /* 챗봇 배경색 추가 */
+            border-radius: 12px; /* 챗봇 컨테이너 자체의 둥근 모서리 */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             padding: 15px; /* 내부 여백 */
             box-sizing: border-box; /* padding이 너비에 포함되도록 */
+            transition: box-shadow 0.3s ease;
         }
         /* 채팅 메시지 영역 */
         #chatMessages {
@@ -46,72 +47,98 @@
             flex-direction: column; /* 메시지 버블들이 세로로 쌓이도록 */
             width: 300px; /* 부모 .main-control-panel의 너비를 꽉 채움 */
             height: 150px; /* 채팅 메시지 영역의 고정 높이 */
-            background-color: #ffffff; /* 챗봇 배경색 */
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+            background-color: #f8f9fa; /* 챗봇 배경색 */
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             padding: 15px; /* 내부 여백 */
             box-sizing: border-box; /* padding이 너비에 포함되도록 */
             overflow-y: auto; /* 내용이 넘칠 경우 스크롤 */
-            border: 1px solid #ddd; /* 테두리 유지 */
+            transition: box-shadow 0.3s ease;
         }
-        /* LiDAR 맵과 버튼을 가로로 묶는 컨테이너 */
+        /* 메인 그룹: 왼쪽(맵) + 오른쪽(버튼) */
+        /* 수정된 map-buttons-group */
         .map-buttons-group {
             display: flex;
-            flex-direction: row; /* 맵과 버튼을 가로로 정렬 */
-            width: 300px; /* 고정 너비 300px (다른 섹션과 동일) */
-            gap: 40px; /* 맵과 버튼 그룹 사이 간격 조정 */
-            align-items: center; /* 내부 요소들을 수직 중앙 정렬 */
-            justify-content: center; /* 수평 중앙 정렬 */
-            background-color: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-            padding: 15px;
+            flex-direction: row;
+            width: 300px;
+            height: 140px;
+            background-color: #f8f9fa;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 20px;
             box-sizing: border-box;
+            gap: 20px;
+            transition: box-shadow 0.3s ease;
         }
-        /* LiDAR 맵 캔버스 */
-        #lidar_map_canvas {
-            background: white;
-            display: block;
-            width: 100px;
-            height: 100px;
-            border: 1px solid #ccc;
-            border-radius: 8px; /* 둥근 모서리 */
-            flex-shrink: 0; /* 줄어들지 않도록 설정 */
+        .map-buttons-group:hover {
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
         }
-        /* 작전개시, 발포 버튼 그룹 */
-        .action-button-group { 
+
+        /* 왼쪽 패널 (LiDAR 맵) */
+        .left-panel {
+            flex: 1;
             display: flex;
-            flex-direction: column; /* 버튼을 세로로 정렬 */
-            gap: 20px; /* 버튼 간 간격 */
-            justify-content: center; /* 버튼들을 중앙 정렬 */
-            width: 80px; /* 버튼 그룹의 고정 너비 */
-            flex-shrink: 0; /* 줄어들지 않도록 설정 */
+            justify-content: center;
+            align-items: center;
         }
+
+        #lidar_map_canvas {
+            width: 110px;
+            height: 110px;
+            background: #f0f0f0;
+            border-radius: 12px;
+            box-shadow: inset 0 0 4px rgba(0,0,0,0.1);
+        }
+
+        /* 오른쪽 패널 (버튼 그룹) */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .action-button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+        }
+
+        /* 버튼 스타일 개선 */
+        .action-button {
+            width: 100%;
+            padding: 12px 0;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(145deg, #034d2d, #022b17);
+            color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transition: all 0.2s ease-in-out;
+        }
+        .action-button:hover {
+            background: linear-gradient(145deg, #055536, #04311c);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+        }
+        .action-button:active {
+            transform: translateY(0);
+            box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+        }
+
         /* TANK IMPACT 맵 컨테이너 */
-        #map_containeryyyy { 
+        #map_container { 
             position: relative;
             width: 300px;
             height: 300px;
             margin: 0 auto;
-            border: 1px solid #333;
             overflow: hidden; /* 자식 요소가 container 밖으로 나가는 것 방지 */
             background-color: #eee; /* 배경색 추가 (초기 로딩 시) */
-            border-radius: 8px; /* 둥근 모서리 */
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-        }
-        #map_container {
-            position: relative;
-            width: 100%; /* 부모 .main-control-panel의 너비를 꽉 채움 */
-            /* 높이를 너비에 비례하여 설정 (1:1 종횡비) */
-            height: 0;
-            padding-bottom: 100%; /* 너비와 동일한 높이 */
-            margin: 0 auto;
-            border: 1px solid #333;
-            overflow: hidden;
-            background-color: #eee;
-            border-radius: 8px; /* 둥근 모서리 */
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-            box-sizing: border-box; /* padding이 너비에 포함되도록 */
+            border-radius: 12px; /* 둥근 모서리 */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: box-shadow 0.3s ease;
         }
         /* TANK IMPACT 맵 캔버스 */
         #map { 
@@ -158,8 +185,8 @@
         /* 액션 버튼 */
         .action-button {
             width: 100%; /* 부모(action-button-group) 너비에 맞춰 꽉 채움 */
-            padding: 10px 15px; /* 내부 패딩으로 버튼 크기 조절 */
-            font-size: 14px;
+            padding: 10px 45px; /* 내부 패딩으로 버튼 크기 조절 */
+            font-size: 12px;
             cursor: pointer;
             border: none;
             border-radius: 8px; /* 둥근 모서리 */
@@ -172,6 +199,7 @@
             justify-content: center;
             align-items: center;
             text-align: center;
+            white-space: nowrap;
         }
         .action-button:hover {
             background-color: #2d2a08; 
@@ -192,6 +220,7 @@
         }
         .user-message {
             background-color: #dcf8c6;
+            border: 1px solid #e0e0e0;
             align-self: flex-end;
             margin-left: auto;
             border-bottom-right-radius: 5px;
@@ -223,17 +252,22 @@
 </head>
 <body>
     <div class="main-control-panel">
-        <h2 class="center-text">SMART CONTROL PANEL</h2>
+        <h2 class="center-text">CONTROL PANEL</h2>
  
         <div id="chatMessages"></div>
 
         <div class="map-buttons-group">
-            <canvas id="lidar_map_canvas" width="100" height="100"></canvas>
-            <div class="action-button-group">
-                <button class="action-button" onclick="startLLMCommand()">작전개시</button>
-                <button class="action-button" onclick="sendAction('snipe')">발포</button>
-                <!-- <button class="action-button" onclick="sendAction('fire')">발포</button> -->
+            <div class="left-panel">
+                <canvas id="lidar_map_canvas" width="100" height="100"></canvas>
             </div>
+            <div class="right-panel">
+                <div class="action-button-group">
+                    <button class="action-button" onclick="startLLMCommand()">작전개시</button>
+                    <button class="action-button" onclick="sendAction('snipe')">발포</button>
+                    <!-- <button class="action-button" onclick="sendAction('fire')">발포</button> -->
+                </div>
+            </div>
+            
         </div>
         <div id="map_container">
             <canvas id="map" width="300" height="300"></canvas>
@@ -369,7 +403,6 @@
             ctx.beginPath();
             ctx.arc(meCanvas.x, meCanvas.y, 3, 0, 2 * Math.PI);
             ctx.fill();
-            ctx.fillText('Me', meCanvas.x + 5, meCanvas.y - 2);
             // 부채꼴
             drawFan(playerpos, playerLidarAngleZ);
         }
@@ -445,12 +478,14 @@
                     }
                     user_prevCommand = user_command;
                     // 탱크 위치
-                    const mapX = x;
-                    const mapY = mapSize - z;
-                    tank.style.left = `${mapX}px`;
-                    tank.style.top = `${mapY}px`;
-                    tank.style.transform = `rotate(${yaw}deg)`;
-                    
+                    // const mapX = x;
+                    // const mapY = mapSize - z;
+                    // tank.style.left = `${mapX}px`;
+                    // tank.style.top = `${mapY}px`;
+                    // tank.style.transform = `rotate(${yaw}deg)`;
+                    const tankCanvasPos = impactWorldToCanvas(x, z);
+                    tank.style.left = `${tankCanvasPos.x}px`;
+                    tank.style.top = `${tankCanvasPos.y}px`;
                     // 목적지 깃발
                     const goal_x = data.goal_x;
                     const goal_z = data.goal_z;
@@ -463,7 +498,29 @@
                     } else {
                         goalFlag.style.display = 'none'; // 목표 지점이 없으면 깃발 숨김
                     }
+                    // path
+                    if (data.path && Array.isArray(data.path) && data.path.length > 1) {
+                        mapCtx.beginPath();
+                        mapCtx.strokeStyle = 'orange';
+                        mapCtx.lineWidth = 2;
 
+                        const start = impactWorldToCanvas(data.path[0].x, data.path[0].z);
+                        mapCtx.moveTo(start.x, start.y);
+
+                        for (let i = 1; i < data.path.length; i++) {
+                            const pt = impactWorldToCanvas(data.path[i].x, data.path[i].z);
+                            mapCtx.lineTo(pt.x, pt.y);
+                        }
+
+                        mapCtx.stroke();
+
+                        // 마지막 지점에 점 그리기 (선택사항)
+                        // const end = impactWorldToCanvas(data.path[data.path.length - 1].x, data.path[data.path.length - 1].z);
+                        // mapCtx.beginPath();
+                        // mapCtx.arc(end.x, end.y, 4, 0, 2 * Math.PI);
+                        // mapCtx.fillStyle = 'red';
+                        // mapCtx.fill();
+                    }
                     // 착탄 위치
                     if (impact_x !== null && impact_z !== null) {
                         const impactX = impact_x;
