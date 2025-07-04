@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from .a_star_pathfinder import AStarPathfinder
 import traceback
 CHANNEL_INDEX = 7
+
 class Path:
     def __init__(self):
         self.initial_obstacles = []
@@ -55,7 +56,7 @@ class Path:
                 이 부분이 거리에 따라 obstacles의 를 가지고 오는 부분입니다.
                 전체 obstacles를 가지고 여기서 분류합니다.
                 '''
-                if distance < 500:
+                if distance < 100:
                     for x in range(x_min, x_max + 1):
                         for z in range(z_min, z_max + 1):
                             self.initial_obstacles.append({
@@ -130,7 +131,12 @@ class Path:
             
             if log_data:
                 latest_log_data = log_data.get('lidarPoints',{})
-                latest_log_data=[p for p in latest_log_data if p['isDetected']]
+                latest_log_data = [
+                    p for p in latest_log_data 
+                    if p.get('isDetected') and (
+                        270 <= p.get('angle', -1) <= 360 or 0 <= p.get('angle', -1) <= 90
+                    )
+                ]
 
 
             if latest_log_data and self.path_check:
@@ -159,6 +165,16 @@ class Path:
             dz = self.path[self.current_path_index]['z'] - self.tank_z
             target_yaw = (math.degrees(math.atan2(dx, dz))) % 360.0
             yaw_error = self.angle_diff(log_data.get('playerBodyX', 0), target_yaw)
+            
+            
+            if 90< yaw_error:
+                movews =-10.0
+            elif yaw_error <-90:
+                movews =-10.0
+            else:
+                movews = 1.0 # * min(0.01, (180 - yaw_error))
+                
+            print(f'🐯🐯🐯{yaw_error}')
             if yaw_error > 50:
                 movead = 2.0
             elif yaw_error < -50:
@@ -173,34 +189,7 @@ class Path:
                 movead = yaw_error * 0.03
             else:
                 movead = 0.0
-            movews = 1.0 # * min(0.01, (180 - yaw_error))
-            # # 상대 방향: 내가 보는 방향이 목표 기준에서 얼마나 벗어났는지
-
-            # if 90 <= toward_angle <= 180:
-            #     movews = -10.0
-            #     movead = 1.7
-            # elif 40 <= toward_angle < 90:
-            #     movews = 0.1
-            #     movead = 1.2
-            # elif 20 <= toward_angle < 40:
-            #     movews = 0.3
-            #     movead = 0.9
-            # elif 0 <= toward_angle < 20:
-            #     movews = 1.0
-            #     movead = 0.5
-
-            # elif 180 < toward_angle <= 270:
-            #     movews = -10.0
-            #     movead = -1.7
-            # elif 270 < toward_angle <= 320:
-            #     movews = 0.1
-            #     movead = -1.2
-            # elif 320 < toward_angle <= 340:
-            #     movews = 0.3
-            #     movead = -0.9
-            # elif 340 < toward_angle <= 360:
-            #     movews = 1.0
-            #     movead = -0.5
+            
 
             if log_data.get("playerSpeed", 0.0) > 5:
                 movews = -0.85
@@ -210,6 +199,7 @@ class Path:
             movews = -10.0
             movead = 0
             return [movews, movead]
+        
     def simplify_path(self, path, tolerance=5.0):
         """
         Ramer–Douglas–Peucker 기반 경로 단순화.
@@ -297,9 +287,6 @@ class Path:
                 point for point in latest_log_data
                 if point.get("channelIndex") == CHANNEL_INDEX and "position" in point
                 ]
-
-            
-
             
             '''장애물 추가 (중복은 set으로 빠르게 필터링)'''
             for obs_raw in filtered_lidar:

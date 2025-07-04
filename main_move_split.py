@@ -75,7 +75,7 @@ target_point_queue = Queue(maxsize=1)
 # target_classes = {0: "Car", 3: "E_Tank", 4: "Human"}
 target_classes = {1: "Car", 0: "E_Tank", 2: "Human"}
 def yolo_worker(yolo_input_q, yolo_output_q):
-    model = YOLO("yolov8x_e500_s512_b8.pt").to("cuda")
+    model = YOLO("yolom_e1000_i640_b8_es100.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:
         # /detect request yolo_input_q에서 이미지 가져오기
@@ -179,6 +179,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         if not action_request:
             info_output_q.put({"status": "success", "control": ""})
             continue
+            # pass
 
         try:
             llm_request = llm_input_q.get_nowait()
@@ -201,7 +202,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         tank_pos = (int(log_data.get("playerPos", {}).get("x")), int(log_data.get("playerPos", {}).get("z")))
         #######################################################################
         # target_point, llm_fire = [140,50],True
-        target_point= [140,20]
+        target_point= [80,265]
         ########################################################################
         if target_point:
             actions = astar.get_action(log_data, target_point)
@@ -340,16 +341,21 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
 @app.route('/detect', methods=['POST'])
 def detect():
     image = request.files.get('image')
+
     if not image:
         return jsonify({"error": "No image received"}), 400
+    
     pil_image = Image.open(BytesIO(image.read()))
     yolo_input_queue.put(pil_image)
+
     try:
         detections = yolo_output_queue.get(timeout=1)
     except queue.Empty:
         return jsonify({})
+    
     detect_input_queue.put(detections)
     filtered_results = []
+
     for box in detections:
         class_id = int(box[5])
         if class_id in target_classes and box[4] > 0.8:
@@ -361,6 +367,7 @@ def detect():
                 'filled': False,
                 'updateBoxWhileMoving': False
             })
+
     return jsonify(filtered_results)
 
 @app.route('/tank_status', methods=['GET'])
@@ -586,9 +593,9 @@ def collision():
 def init():
     config = {
         "startMode": "start",
-        "blStartX": 180,
+        "blStartX": 120,
         "blStartY": 10,
-        "blStartZ": 140,
+        "blStartZ": 32,
         "rdStartX": 180,
         "rdStartY": -10,
         "rdStartZ": 60,
