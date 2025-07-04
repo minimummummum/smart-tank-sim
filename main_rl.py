@@ -196,7 +196,6 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         # if rl_report_flag and target_point is None and goal_flag is False:
         if rl_report_flag and goal_flag is False:
             rl_action = rl.select_action(state)
-            print(f"RL Action: {rl_action}")
             rl_report_flag = False
 
         tank_pos = (int(log_data.get("playerPos", {}).get("x")), int(log_data.get("playerPos", {}).get("z")))
