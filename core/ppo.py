@@ -32,7 +32,7 @@ class PPO:
         return action.item()
 
 class Agent:
-    def __init__(self, state_dim=2, action_size=4, checkpoint_path="ppo_model/model4.pth"):
+    def __init__(self, state_dim=2, action_size=4, checkpoint_path="ppo_model/model3.pth"):
         self.ppo = PPO(state_dim, action_size)
         self.device = self.ppo.device
         if os.path.exists(checkpoint_path):
