@@ -57,6 +57,13 @@ target_point_queue = Queue(maxsize=1)
 target_classes = {1: "Car", 0: "E_Tank", 2: "Human"}
 def yolo_worker(yolo_input_q, yolo_output_q):
     # model = YOLO("yolov8x_e500_s512_b8.pt").to("cuda")
+    '''
+    yolov8n
+    yolov8s
+    yolov8l
+    yolom_e1000_i640_b8_es100
+    yolov8x_e500_s512_b8
+    '''
     model = YOLO("yolom_e1000_i640_b8_es100.pt").to("cuda")
     # YOLO 프로세스 반복
     while True:

@@ -6,7 +6,7 @@ import time
 import matplotlib.pyplot as plt
 from .a_star_pathfinder import AStarPathfinder
 import traceback
-CHANNEL_INDEX = 6
+CHANNEL_INDEX = 3
 class Path:
     def __init__(self):
         self.initial_obstacles = []
@@ -56,7 +56,7 @@ class Path:
                 이 부분이 거리에 따라 obstacles의 를 가지고 오는 부분입니다.
                 전체 obstacles를 가지고 여기서 분류합니다.
                 '''
-                if distance < 100:
+                if distance < 500:
                     for x in range(x_min, x_max + 1):
                         for z in range(z_min, z_max + 1):
                             self.initial_obstacles.append({
@@ -174,7 +174,7 @@ class Path:
             else:
                 movews = 1.0 # * min(0.01, (180 - yaw_error))
                 
-            print(f'🐯🐯🐯{yaw_error}')
+            # print(f'🐯🐯🐯{yaw_error}')
             if yaw_error > 50:
                 movead = 2.0
             elif yaw_error < -50:

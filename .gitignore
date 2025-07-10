@@ -3,3 +3,6 @@ yolov8x_e500_s512_b8.pt
 /drop
 /__pycache__
 /core/__pycache__
+yolov8l.pt
+yolov8n.pt
+yolov8s.pt

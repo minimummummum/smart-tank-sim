@@ -308,7 +308,7 @@ def action_worker(action_input_q, action_output_q, hit_input_q, detect_input_q,
         tank_pos = (int(log_data.get("playerPos", {}).get("x")), int(log_data.get("playerPos", {}).get("z")))
         #######################################################################
         # target_point, llm_fire = [140,50],True
-        target_point= [80,265]
+        # target_point= [80,265]
         ########################################################################
         if target_point:
             actions = astar.get_action(log_data, target_point)
@@ -701,9 +701,9 @@ def collision():
 def init():
     config = {
         "startMode": "start",
-        "blStartX": 120,
+        "blStartX": 8,
         "blStartY": 10,
-        "blStartZ": 32,
+        "blStartZ": 290,
         "rdStartX": 180,
         "rdStartY": -10,
         "rdStartZ": 60,
@@ -759,4 +759,4 @@ if __name__ == '__main__':
                                                       ))
     yolo_proc.start()
     action_proc.start()
-    app.run(host='0.0.0.0', port=5001, threaded=True, debug=False)
+    app.run(host='0.0.0.0', port=5036, threaded=True, debug=False)
